@@ -13,31 +13,24 @@ const services = [
   },
   {
     icon: Shield,
-    title: "Paint Protection Film",
-    description: "Invisible protection that keeps your paint pristine for years to come",
-    features: ["Self-healing technology", "UV protection", "10-year warranty"],
-    price: "From $1,800"
-  },
-  {
-    icon: Sparkles,
-    title: "Ceramic Coating",
-    description: "Advanced nano-coating for ultimate shine and protection",
-    features: ["Hydrophobic coating", "Enhanced gloss", "Easy maintenance"],
-    price: "From $800"
-  },
-  {
-    icon: SunMedium,
-    title: "Window Tinting",
-    description: "Premium tints for privacy, comfort, and UV protection",
-    features: ["99% UV rejection", "Heat reduction", "Privacy protection"],
-    price: "From $400"
+    title: "PPF & Ceramic Coating",
+    description: "Ultimate protection combining Paint Protection Film and Ceramic Coating",
+    features: ["Self-healing PPF", "Ceramic top coat", "10-year warranty"],
+    price: "From $2,200"
   },
   {
     icon: Droplets,
-    title: "Detailing Services",
+    title: "Detailing",
     description: "Complete interior and exterior detailing for the perfect finish",
     features: ["Paint correction", "Interior protection", "Maintenance packages"],
     price: "From $200"
+  },
+  {
+    icon: SunMedium,
+    title: "Tint & Face-lift",
+    description: "Premium window tinting and vehicle appearance enhancement services",
+    features: ["99% UV rejection", "Privacy protection", "Aesthetic upgrades"],
+    price: "From $400"
   }
 ];
 
