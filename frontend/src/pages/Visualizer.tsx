@@ -17,7 +17,6 @@ import { Canvas } from "@react-three/fiber";
 import { OrbitControls, useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 
-// ---------- 3D Car Viewer ----------
 interface CarViewerProps {
   glbPath: string;
   color: string;
@@ -27,15 +26,23 @@ interface CarViewerProps {
 const CarViewer = ({ glbPath, color, pattern }: CarViewerProps) => {
   const { scene } = useGLTF(glbPath);
 
-  // Apply color and simple patterns to all meshes
-  scene.traverse((child: any) => {
-    if (child.isMesh) {
-      child.material = new THREE.MeshStandardMaterial({ color });
+  scene.traverse((child: THREE.Object3D) => {
+    if ((child as THREE.Mesh).isMesh) {
+      const mesh = child as THREE.Mesh;
 
-      if (pattern === "stripes") {
-        child.material.map = new THREE.CanvasTexture(generateStripeTexture());
-      } else if (pattern === "carbon") {
-        child.material.map = new THREE.CanvasTexture(generateCarbonTexture());
+      if (mesh.material instanceof THREE.MeshStandardMaterial) {
+        mesh.material.color.set(color);
+
+        if (pattern === "stripes") {
+          mesh.material.map = new THREE.CanvasTexture(generateStripeTexture());
+          mesh.material.needsUpdate = true;
+        } else if (pattern === "carbon") {
+          mesh.material.map = new THREE.CanvasTexture(generateCarbonTexture());
+          mesh.material.needsUpdate = true;
+        } else {
+          mesh.material.map = null;
+          mesh.material.needsUpdate = true;
+        }
       }
     }
   });
@@ -43,7 +50,6 @@ const CarViewer = ({ glbPath, color, pattern }: CarViewerProps) => {
   return <primitive object={scene} scale={0.7} position={[0, -0.5, 0]} />;
 };
 
-// ---------- Pattern Textures ----------
 const generateStripeTexture = () => {
   const size = 512;
   const canvas = document.createElement("canvas");
@@ -81,33 +87,26 @@ const generateCarbonTexture = () => {
   return canvas;
 };
 
-// ---------- Car Models ----------
 const carModels = [
-  // Coupe
   { name: "BMW", category: "Coupe", glbPath: "/coupe/ibmw.glb" },
   { name: "Audi TT", category: "Coupe", glbPath: "/coupe/tt.glb" },
   { name: "Cayenne", category: "Coupe", glbPath: "/coupe/cayene.glb" },
   { name: "M6", category: "Coupe", glbPath: "/coupe/m6.glb" },
   { name: "Porsche 911", category: "Coupe", glbPath: "/coupe/911.glb" },
 
-  // Hatchback
   { name: "Mazda 3", category: "Hatchback", glbPath: "/hatchback/mazda.glb" },
 
-  // Mini SUV
   { name: "Aston DBX", category: "MiniSUV", glbPath: "/minisuv/dbx.glb" },
   { name: "Mercedes GLCC", category: "MiniSUV", glbPath: "/minisuv/glcc.glb" },
   { name: "BMW X3", category: "MiniSUV", glbPath: "/minisuv/x3.glb" },
 
-  // Pickup
   { name: "Ford Raptor", category: "Pickup", glbPath: "/pickup/raptor.glb" },
 
-  // Sedan
   { name: "Mercedes A45", category: "Sedan", glbPath: "/sedan/a45.glb" },
   { name: "BMW M3", category: "Sedan", glbPath: "/sedan/m3.glb" },
   { name: "Mazda Atenza", category: "Sedan", glbPath: "/sedan/atenza.glb" },
   { name: "VW Polo", category: "Sedan", glbPath: "/sedan/polo.glb" },
 
-  // SUV
   { name: "Range Rover 2010", category: "SUV", glbPath: "/suv/2010rr.glb" },
   { name: "G63", category: "SUV", glbPath: "/suv/g63.glb" },
   { name: "G631", category: "SUV", glbPath: "/suv/g631.glb" },
@@ -118,7 +117,6 @@ const carModels = [
   { name: "XT", category: "SUV", glbPath: "/suv/xt.glb" },
 ];
 
-// ---------- Wraps ----------
 const wrapFinishes = [
   { name: "Matte Black", color: "#1a1a1a", type: "Matte", price: 2800 },
   { name: "Gloss White", color: "#ffffff", type: "Gloss", price: 2500 },
@@ -132,7 +130,6 @@ const wrapFinishes = [
   { name: "Carbon Fiber", color: "#2c2c2c", type: "Textured", price: 3800 },
 ];
 
-// ---------- Patterns ----------
 const patterns = [
   { name: "Solid Color", pattern: "solid" },
   { name: "Carbon Fiber", pattern: "carbon" },
@@ -141,7 +138,6 @@ const patterns = [
   { name: "Gradient", pattern: "gradient" },
 ];
 
-// ---------- Main Visualizer ----------
 const Visualizer = () => {
   const [selectedModel, setSelectedModel] = useState(carModels[0]);
   const [selectedWrap, setSelectedWrap] = useState(wrapFinishes[0]);
