@@ -59,7 +59,7 @@ const Hero = () => {
             <div className="grid grid-cols-3 gap-8 pt-8">
               <div className="text-center lg:text-left">
                 <div className="text-3xl font-bold text-gradient-primary">
-                  500+
+                  100+
                 </div>
                 <div className="text-muted-foreground">Vehicles Wrapped</div>
               </div>
