@@ -51,7 +51,7 @@ const Hero = () => {
               </Link>
               <Button className="btn-secondary group">
                 <Play className="mr-2 w-5 h-5" />
-                Watch Process
+                Get a Quote
               </Button>
             </div>
 

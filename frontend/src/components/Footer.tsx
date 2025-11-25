@@ -12,7 +12,7 @@ const Footer = () => {
               <div className="w-8 h-8 bg-gradient-primary rounded-lg flex items-center justify-center">
                 <Car className="w-5 h-5 text-primary-foreground" />
               </div>
-              <span className="text-xl font-bold text-gradient-primary">WrapStudio</span>
+              <span className="text-xl font-bold text-gradient-primary">Wrap & Drive</span>
             </Link>
             <p className="text-muted-foreground max-w-sm">
               Transform your vehicle with premium wraps, protection films, and detailing services. 
@@ -61,15 +61,15 @@ const Footer = () => {
             <div className="space-y-3">
               <div className="flex items-center text-muted-foreground">
                 <Phone className="w-4 h-4 mr-3 text-primary" />
-                <span>(555) 123-WRAP</span>
+                <span>+254792391610</span>
               </div>
               <div className="flex items-center text-muted-foreground">
                 <Mail className="w-4 h-4 mr-3 text-primary" />
-                <span>info@wrapstudio.com</span>
+                <span>wrapndrive@gmail.com</span>
               </div>
               <div className="flex items-start text-muted-foreground">
                 <MapPin className="w-4 h-4 mr-3 text-primary mt-0.5" />
-                <span>123 Auto Boulevard<br />Las Vegas, NV 89101</span>
+                <span>Thome<br />Nothern ByPass, Opposite Quickmart</span>
               </div>
             </div>
           </div>
@@ -78,7 +78,7 @@ const Footer = () => {
         {/* Bottom Section */}
         <div className="border-t border-border mt-12 pt-8 flex flex-col sm:flex-row justify-between items-center">
           <p className="text-muted-foreground text-sm">
-            © 2024 WrapStudio. All rights reserved.
+            © 2025 Wrap & Drive. All rights reserved.
           </p>
           <div className="flex space-x-6 mt-4 sm:mt-0">
             <a href="#" className="text-muted-foreground hover:text-primary text-sm transition-colors">Privacy Policy</a>
