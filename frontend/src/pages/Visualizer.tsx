@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
@@ -13,103 +13,112 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Car, Palette, Layers, Download, Share, Quote } from "lucide-react";
+import { Canvas } from "@react-three/fiber";
+import { OrbitControls, useGLTF } from "@react-three/drei";
+import * as THREE from "three";
 
+// ---------- 3D Car Viewer ----------
+interface CarViewerProps {
+  glbPath: string;
+  color: string;
+  pattern: string;
+}
+
+const CarViewer = ({ glbPath, color, pattern }: CarViewerProps) => {
+  const { scene } = useGLTF(glbPath);
+
+  // Apply color and simple patterns to all meshes
+  scene.traverse((child: any) => {
+    if (child.isMesh) {
+      child.material = new THREE.MeshStandardMaterial({ color });
+
+      if (pattern === "stripes") {
+        child.material.map = new THREE.CanvasTexture(generateStripeTexture());
+      } else if (pattern === "carbon") {
+        child.material.map = new THREE.CanvasTexture(generateCarbonTexture());
+      }
+    }
+  });
+
+  return <primitive object={scene} scale={0.7} position={[0, -0.5, 0]} />;
+};
+
+// ---------- Pattern Textures ----------
+const generateStripeTexture = () => {
+  const size = 512;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, size, size);
+  ctx.fillStyle = "rgba(0,0,0,0.1)";
+  for (let i = 0; i < size; i += 40) {
+    ctx.fillRect(i, 0, 20, size);
+  }
+  return canvas;
+};
+
+const generateCarbonTexture = () => {
+  const size = 256;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = "#2c2c2c";
+  ctx.fillRect(0, 0, size, size);
+  ctx.strokeStyle = "#444";
+  for (let i = 0; i < size; i += 16) {
+    ctx.beginPath();
+    ctx.moveTo(i, 0);
+    ctx.lineTo(i, size);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, i);
+    ctx.lineTo(size, i);
+    ctx.stroke();
+  }
+  return canvas;
+};
+
+// ---------- Car Models ----------
 const carModels = [
-  // Sports & Supercars (8)
-  { name: "BMW M3", image: "🏎️", category: "Sports" },
-  { name: "Audi R8", image: "🚗", category: "Supercar" },
-  { name: "Mercedes AMG GT", image: "🏁", category: "Sports" },
-  { name: "Porsche 911", image: "🏎️", category: "Sports" },
-  { name: "Lamborghini Huracan", image: "🏎️", category: "Supercar" },
-  { name: "Ford Mustang", image: "🚗", category: "Muscle" },
-  { name: "Chevrolet Corvette", image: "🏁", category: "Sports" },
-  { name: "Dodge Challenger", image: "🚗", category: "Muscle" },
+  // Coupe
+  { name: "BMW", category: "Coupe", glbPath: "/coupe/ibmw.glb" },
+  { name: "Audi TT", category: "Coupe", glbPath: "/coupe/tt.glb" },
+  { name: "Cayenne", category: "Coupe", glbPath: "/coupe/cayene.glb" },
+  { name: "M6", category: "Coupe", glbPath: "/coupe/m6.glb" },
+  { name: "Porsche 911", category: "Coupe", glbPath: "/coupe/911.glb" },
 
-  // SUVs (24)
-  { name: "Toyota RAV4", image: "🚙", category: "SUV" },
-  { name: "Honda CR-V", image: "🚙", category: "SUV" },
-  { name: "Mazda CX-5", image: "🚙", category: "SUV" },
-  { name: "Subaru Forester", image: "🚙", category: "SUV" },
-  { name: "Nissan Rogue", image: "🚙", category: "SUV" },
-  { name: "Hyundai Tucson", image: "🚙", category: "SUV" },
-  { name: "Kia Sportage", image: "🚙", category: "SUV" },
-  { name: "Ford Explorer", image: "🚙", category: "Large SUV" },
-  { name: "Jeep Grand Cherokee", image: "🚙", category: "SUV" },
-  { name: "Toyota 4Runner", image: "🚙", category: "Off-Road SUV" },
-  { name: "BMW X5", image: "🚙", category: "Luxury SUV" },
-  { name: "Mercedes GLE", image: "🚙", category: "Luxury SUV" },
-  { name: "Range Rover Sport", image: "🚙", category: "Luxury SUV" },
-  { name: "Audi Q7", image: "🚙", category: "Luxury SUV" },
-  { name: "Lexus RX", image: "🚙", category: "Luxury SUV" },
-  { name: "Cadillac Escalade", image: "🚙", category: "Premium SUV" },
-  { name: "Lincoln Navigator", image: "🚙", category: "Premium SUV" },
-  { name: "Jeep Wrangler", image: "🚙", category: "Off-Road SUV" },
-  { name: "Kia Sorento", image: "🚙", category: "SUV" },
-  { name: "Honda Pilot", image: "🚙", category: "Large SUV" },
-  { name: "Volkswagen Tiguan", image: "🚙", category: "SUV" },
-  { name: "Subaru Outback", image: "🚙", category: "SUV" },
-  { name: "Mazda CX-9", image: "🚙", category: "Large SUV" },
-  { name: "Hyundai Santa Fe", image: "🚙", category: "SUV" },
+  // Hatchback
+  { name: "Mazda 3", category: "Hatchback", glbPath: "/hatchback/mazda.glb" },
 
-  // Pickups (12)
-  { name: "Ford F-150", image: "🛻", category: "Full-size Pickup" },
-  { name: "Chevrolet Silverado", image: "🛻", category: "Full-size Pickup" },
-  { name: "Ram 1500", image: "🛻", category: "Full-size Pickup" },
-  { name: "GMC Sierra", image: "🛻", category: "Full-size Pickup" },
-  { name: "Toyota Tundra", image: "🛻", category: "Full-size Pickup" },
-  { name: "Nissan Titan", image: "🛻", category: "Full-size Pickup" },
-  { name: "Toyota Tacoma", image: "🛻", category: "Mid-size Pickup" },
-  { name: "Ford Ranger", image: "🛻", category: "Mid-size Pickup" },
-  { name: "Chevrolet Colorado", image: "🛻", category: "Mid-size Pickup" },
-  { name: "GMC Canyon", image: "🛻", category: "Mid-size Pickup" },
-  { name: "Nissan Frontier", image: "🛻", category: "Mid-size Pickup" },
-  { name: "Jeep Gladiator", image: "🛻", category: "Off-Road Pickup" },
+  // Mini SUV
+  { name: "Aston DBX", category: "MiniSUV", glbPath: "/minisuv/dbx.glb" },
+  { name: "Mercedes GLCC", category: "MiniSUV", glbPath: "/minisuv/glcc.glb" },
+  { name: "BMW X3", category: "MiniSUV", glbPath: "/minisuv/x3.glb" },
 
-  // Sedans (10)
-  { name: "Toyota Mark X", image: "🚘", category: "Sedan" },
-  { name: "Toyota Camry", image: "🚘", category: "Sedan" },
-  { name: "Honda Accord", image: "🚘", category: "Sedan" },
-  { name: "Nissan Altima", image: "🚘", category: "Sedan" },
-  { name: "Hyundai Sonata", image: "🚘", category: "Sedan" },
-  { name: "Kia Optima", image: "🚘", category: "Sedan" },
-  { name: "BMW 3 Series", image: "🚘", category: "Luxury Sedan" },
-  { name: "Mercedes C-Class", image: "🚘", category: "Luxury Sedan" },
-  { name: "Audi A4", image: "🚘", category: "Luxury Sedan" },
-  { name: "Hyundai Elantra", image: "🚘", category: "Sedan" },
+  // Pickup
+  { name: "Ford Raptor", category: "Pickup", glbPath: "/pickup/raptor.glb" },
 
-  // Compacts & Hatchbacks (8)
-  { name: "Toyota Corolla", image: "🚗", category: "Compact" },
-  { name: "Honda Civic", image: "🚗", category: "Compact" },
-  { name: "Mazda 3", image: "🚗", category: "Compact" },
-  { name: "Volkswagen Golf", image: "🚗", category: "Hatchback" },
-  { name: "Subaru Impreza", image: "🚗", category: "Compact" },
-  { name: "Ford Focus", image: "🚗", category: "Hatchback" },
-  { name: "Kia Rio", image: "🚗", category: "Subcompact" },
-  { name: "Hyundai Accent", image: "🚗", category: "Subcompact" },
+  // Sedan
+  { name: "Mercedes A45", category: "Sedan", glbPath: "/sedan/a45.glb" },
+  { name: "BMW M3", category: "Sedan", glbPath: "/sedan/m3.glb" },
+  { name: "Mazda Atenza", category: "Sedan", glbPath: "/sedan/atenza.glb" },
+  { name: "VW Polo", category: "Sedan", glbPath: "/sedan/polo.glb" },
 
-  // Economy Cars (6)
-  { name: "Mitsubishi Mirage", image: "🚗", category: "Economy" },
-  { name: "Nissan Versa", image: "🚗", category: "Economy" },
-  { name: "Kia Forte", image: "🚗", category: "Economy" },
-  { name: "Chevrolet Spark", image: "🚗", category: "Economy" },
-  { name: "Toyota Yaris", image: "🚗", category: "Economy" },
-  { name: "Hyundai Venue", image: "🚗", category: "Economy" },
-
-  // Electric & Hybrid (12)
-  { name: "Tesla Model S", image: "⚡", category: "Electric Sedan" },
-  { name: "Tesla Model X", image: "⚡", category: "Electric SUV" },
-  { name: "Tesla Model Y", image: "⚡", category: "Electric SUV" },
-  { name: "Tesla Model 3", image: "⚡", category: "Electric Sedan" },
-  { name: "Ford Mustang Mach-E", image: "⚡", category: "Electric SUV" },
-  { name: "Rivian R1S", image: "⚡", category: "Electric SUV" },
-  { name: "Rivian R1T", image: "⚡", category: "Electric Pickup" },
-  { name: "Ford F-150 Lightning", image: "⚡", category: "Electric Pickup" },
-  { name: "Tesla Cybertruck", image: "⚡", category: "Electric Pickup" },
-  { name: "Toyota Prius", image: "🔋", category: "Hybrid" },
-  { name: "Jeep Wrangler 4xe", image: "🔌", category: "Hybrid SUV" },
-  { name: "Honda Insight", image: "🔋", category: "Hybrid" },
+  // SUV
+  { name: "Range Rover 2010", category: "SUV", glbPath: "/suv/2010rr.glb" },
+  { name: "G63", category: "SUV", glbPath: "/suv/g63.glb" },
+  { name: "G631", category: "SUV", glbPath: "/suv/g631.glb" },
+  { name: "Lec", category: "SUV", glbPath: "/suv/lec.glb" },
+  { name: "LX", category: "SUV", glbPath: "/suv/lx.glb" },
+  { name: "Range Rover Sport", category: "SUV", glbPath: "/suv/rrsport.glb" },
+  { name: "BMW X7", category: "SUV", glbPath: "/suv/x7.glb" },
+  { name: "XT", category: "SUV", glbPath: "/suv/xt.glb" },
 ];
 
+// ---------- Wraps ----------
 const wrapFinishes = [
   { name: "Matte Black", color: "#1a1a1a", type: "Matte", price: 2800 },
   { name: "Gloss White", color: "#ffffff", type: "Gloss", price: 2500 },
@@ -123,6 +132,7 @@ const wrapFinishes = [
   { name: "Carbon Fiber", color: "#2c2c2c", type: "Textured", price: 3800 },
 ];
 
+// ---------- Patterns ----------
 const patterns = [
   { name: "Solid Color", pattern: "solid" },
   { name: "Carbon Fiber", pattern: "carbon" },
@@ -131,6 +141,7 @@ const patterns = [
   { name: "Gradient", pattern: "gradient" },
 ];
 
+// ---------- Main Visualizer ----------
 const Visualizer = () => {
   const [selectedModel, setSelectedModel] = useState(carModels[0]);
   const [selectedWrap, setSelectedWrap] = useState(wrapFinishes[0]);
@@ -148,14 +159,14 @@ const Visualizer = () => {
           </h1>
           <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
             Customize your vehicle in real-time. Choose your model, select
-            wraps, and see your vision come to life.
+            wraps, and see it come to life.
           </p>
         </div>
       </section>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="grid lg:grid-cols-3 gap-8">
-          {/* Controls Panel */}
+          {/* Controls */}
           <div className="lg:col-span-1 space-y-6">
             <Tabs defaultValue="model" className="w-full">
               <TabsList className="grid w-full grid-cols-3">
@@ -163,6 +174,7 @@ const Visualizer = () => {
                 <TabsTrigger value="wrap">Wrap</TabsTrigger>
               </TabsList>
 
+              {/* Model Selector */}
               <TabsContent value="model" className="space-y-4">
                 <Card className="card-glass">
                   <CardHeader>
@@ -185,36 +197,16 @@ const Visualizer = () => {
                       <SelectContent>
                         {carModels.map((model) => (
                           <SelectItem key={model.name} value={model.name}>
-                            {model.image} {model.name} ({model.category})
+                            {model.name} ({model.category})
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
-                    <div className="mt-4 grid grid-cols-2 gap-2">
-                      {carModels.slice(0, 6).map((model) => (
-                        <button
-                          key={model.name}
-                          onClick={() => setSelectedModel(model)}
-                          className={`p-3 rounded-lg border-2 transition-all text-left ${
-                            selectedModel.name === model.name
-                              ? "border-primary bg-primary/10"
-                              : "border-border bg-card hover:border-primary/50"
-                          }`}
-                        >
-                          <div className="text-2xl mb-1">{model.image}</div>
-                          <div className="text-sm font-medium">
-                            {model.name}
-                          </div>
-                          <Badge variant="secondary" className="text-xs">
-                            {model.category}
-                          </Badge>
-                        </button>
-                      ))}
-                    </div>
                   </CardContent>
                 </Card>
               </TabsContent>
 
+              {/* Wrap Selector */}
               <TabsContent value="wrap" className="space-y-4">
                 <Card className="card-glass">
                   <CardHeader>
@@ -255,6 +247,7 @@ const Visualizer = () => {
                 </Card>
               </TabsContent>
 
+              {/* Pattern Selector */}
               <TabsContent value="pattern" className="space-y-4">
                 <Card className="card-glass">
                   <CardHeader>
@@ -304,121 +297,39 @@ const Visualizer = () => {
                 </div>
               </CardHeader>
               <CardContent className="space-y-6">
-                {/* 3D Preview Area */}
-                <div className="relative">
-                  <div
-                    className="w-full h-96 rounded-xl flex items-center justify-center text-9xl relative overflow-hidden"
-                    style={{
-                      backgroundColor: selectedWrap.color,
-                      boxShadow: `0 25px 50px -12px ${selectedWrap.color}40`,
-                      backgroundImage:
-                        selectedPattern.pattern === "stripes"
-                          ? `repeating-linear-gradient(45deg, transparent, transparent 20px, rgba(255,255,255,0.1) 20px, rgba(255,255,255,0.1) 40px)`
-                          : selectedPattern.pattern === "carbon"
-                          ? `radial-gradient(circle at 25% 25%, rgba(255,255,255,0.1) 2px, transparent 2px),
-                         radial-gradient(circle at 75% 75%, rgba(255,255,255,0.1) 2px, transparent 2px)`
-                          : "none",
-                    }}
+                {/* 3D Preview */}
+                <div className="w-full h-96 rounded-xl overflow-hidden">
+                  <Suspense
+                    fallback={
+                      <div className="text-center mt-20">
+                        Loading 3D Model...
+                      </div>
+                    }
                   >
-                    <div className="text-white/20 font-bold transform hover:scale-110 transition-transform">
-                      {selectedModel.image}
-                    </div>
-
-                    {/* Finish Type Badge */}
-                    <Badge
-                      className="absolute top-4 right-4 bg-background/90 text-foreground"
-                      variant="secondary"
-                    >
-                      {selectedWrap.type} Finish
-                    </Badge>
-
-                    {/* Pattern Badge */}
-                    <Badge
-                      className="absolute top-4 left-4 bg-background/90 text-foreground"
-                      variant="secondary"
-                    >
-                      {selectedPattern.name}
-                    </Badge>
-                  </div>
-                </div>
-
-                {/* Configuration Summary */}
-                <div className="grid md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <h3 className="font-bold text-lg">Configuration</h3>
-                    <div className="space-y-1 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Vehicle:</span>
-                        <span className="font-medium">
-                          {selectedModel.name}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Wrap:</span>
-                        <span className="font-medium">{selectedWrap.name}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Pattern:</span>
-                        <span className="font-medium">
-                          {selectedPattern.name}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Finish:</span>
-                        <span className="font-medium">{selectedWrap.type}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <h3 className="font-bold text-lg">Pricing</h3>
-                    <div className="space-y-1 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">
-                          Base Wrap:
-                        </span>
-                        <span className="font-medium">
-                          ${selectedWrap.price}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">
-                          Installation:
-                        </span>
-                        <span className="font-medium">$500</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">
-                          Pattern Add-on:
-                        </span>
-                        <span className="font-medium">
-                          ${selectedPattern.pattern === "solid" ? 0 : 300}
-                        </span>
-                      </div>
-                      <div className="border-t border-border pt-2 mt-2">
-                        <div className="flex justify-between font-bold text-lg">
-                          <span>Total:</span>
-                          <span className="text-primary">
-                            $
-                            {selectedWrap.price +
-                              500 +
-                              (selectedPattern.pattern === "solid" ? 0 : 300)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Action Buttons */}
-                <div className="flex flex-col sm:flex-row gap-4">
-                  <Button className="btn-hero flex-1">
-                    <Quote className="mr-2 w-5 h-5" />
-                    Get Official Quote
-                  </Button>
-                  <Button className="btn-secondary flex-1">
-                    Schedule Consultation
-                  </Button>
+                    <Canvas>
+                      <ambientLight intensity={0.5} />
+                      <directionalLight position={[5, 5, 5]} intensity={1} />
+                      <CarViewer
+                        glbPath={selectedModel.glbPath}
+                        color={selectedWrap.color}
+                        pattern={selectedPattern.pattern}
+                      />
+                      <OrbitControls enablePan enableZoom enableRotate />
+                    </Canvas>
+                  </Suspense>
+                  {/* Badges */}
+                  <Badge
+                    className="absolute top-4 right-4 bg-background/90 text-foreground"
+                    variant="secondary"
+                  >
+                    {selectedWrap.type} Finish
+                  </Badge>
+                  <Badge
+                    className="absolute top-4 left-4 bg-background/90 text-foreground"
+                    variant="secondary"
+                  >
+                    {selectedPattern.name}
+                  </Badge>
                 </div>
               </CardContent>
             </Card>
