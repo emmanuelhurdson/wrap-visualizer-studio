@@ -16,7 +16,6 @@ import { Car, Palette, Layers, Download, Share, Quote } from "lucide-react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, useGLTF } from "@react-three/drei";
 import * as THREE from "three";
-
 interface CarViewerProps {
   glbPath: string;
   color: string;
@@ -305,11 +304,13 @@ const Visualizer = () => {
                     <Canvas>
                       <ambientLight intensity={0.5} />
                       <directionalLight position={[5, 5, 5]} intensity={1} />
+
                       <CarViewer
                         glbPath={selectedModel.glbPath}
                         color={selectedWrap.color}
                         pattern={selectedPattern.pattern}
                       />
+
                       <OrbitControls enablePan enableZoom enableRotate />
                     </Canvas>
                   </Suspense>
