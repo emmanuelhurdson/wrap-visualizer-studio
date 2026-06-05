@@ -1,181 +1,228 @@
 import { useState } from 'react';
+import { CAR_MODELS, CAR_MODELS_BY_CATEGORY, DEFAULT_CAR_ID, type CarModel } from '@/data/cars';
 import type { WrapConfig } from './ThreeScene';
 
 interface WrapPanelProps {
-  onApplyWrap: (config: WrapConfig) => void;
+  loading:          boolean;
+  pickMode:         boolean;
+  paintCount:       number;
+  onSelectCar:      (car: CarModel) => void;
+  onApplyWrap:      (config: WrapConfig) => void;
+  onTogglePickMode: () => void;
+  onClearPaintSet:  () => void;
 }
 
 const PRESETS: { label: string; swatch: string; config: WrapConfig }[] = [
-  {
-    label:  'Matte Black',
-    swatch: '#1a1a1a',
-    config: { type: 'solid', color: '#1a1a1a' },
-  },
-  {
-    label:  'Metallic Red',
-    swatch: '#b91c1c',
-    config: { type: 'metallic', color: '#b91c1c' },
-  },
-  {
-    label:  'Carbon Fiber',
-    swatch: '#222222',
-    config: { type: 'carbon' },
-  },
+  { label: 'Matte Black',  swatch: '#1a1a1a', config: { type: 'solid',    color: '#1a1a1a' } },
+  { label: 'Metallic Red', swatch: '#b91c1c', config: { type: 'metallic', color: '#b91c1c' } },
+  { label: 'Carbon Fiber', swatch: '#222222', config: { type: 'carbon' } },
 ];
 
-// ── Styles ────────────────────────────────────────────────────────────────────
-// All inline so this panel is fully self-contained and works on any page.
+// ── Style helpers ─────────────────────────────────────────────────────────────
 
 const panel: React.CSSProperties = {
-  position:        'fixed',
-  bottom:          '1.75rem',
-  right:           '1.75rem',
-  zIndex:          20,
-  width:           '252px',
-  padding:         '1.25rem',
-  background:      'rgba(8, 8, 10, 0.78)',
-  backdropFilter:  'blur(14px)',
+  position: 'fixed', bottom: '1.75rem', right: '1.75rem', zIndex: 20,
+  width: '264px', padding: '1.25rem',
+  background: 'rgba(8,8,10,0.82)', backdropFilter: 'blur(14px)',
   WebkitBackdropFilter: 'blur(14px)',
-  border:          '1px solid rgba(255, 255, 255, 0.09)',
-  borderRadius:    '14px',
-  color:           '#f0f0f0',
-  fontFamily:      'system-ui, -apple-system, sans-serif',
-  fontSize:        '13px',
-  boxShadow:       '0 8px 32px rgba(0,0,0,0.6)',
-  userSelect:      'none',
+  border: '1px solid rgba(255,255,255,0.09)', borderRadius: '14px',
+  color: '#f0f0f0', fontFamily: 'system-ui,-apple-system,sans-serif',
+  fontSize: '13px', boxShadow: '0 8px 32px rgba(0,0,0,0.6)', userSelect: 'none',
 };
 
-const sectionLabel: React.CSSProperties = {
-  display:        'block',
-  fontSize:       '10px',
-  fontWeight:     600,
-  letterSpacing:  '0.1em',
-  textTransform:  'uppercase',
-  color:          '#666',
-  marginBottom:   '0.5rem',
+const label: React.CSSProperties = {
+  display: 'block', fontSize: '10px', fontWeight: 600,
+  letterSpacing: '0.1em', textTransform: 'uppercase', color: '#555', marginBottom: '0.45rem',
 };
 
 const divider: React.CSSProperties = {
-  height:     '1px',
-  background: 'rgba(255,255,255,0.06)',
-  margin:     '0.85rem 0',
+  height: '1px', background: 'rgba(255,255,255,0.06)', margin: '0.85rem 0',
 };
 
-// Base button — we compose on top of this
-const btn = (bg: string, border = 'rgba(255,255,255,0.1)'): React.CSSProperties => ({
-  display:        'flex',
-  alignItems:     'center',
-  gap:            '0.5rem',
-  width:          '100%',
-  padding:        '0.5rem 0.7rem',
-  background:     bg,
-  border:         `1px solid ${border}`,
-  borderRadius:   '8px',
-  color:          '#f0f0f0',
-  fontSize:       '12.5px',
-  fontWeight:     500,
-  cursor:         'pointer',
-  textAlign:      'left',
-  lineHeight:     1.2,
-  transition:     'background 0.15s',
+const btn = (bg: string, border = 'rgba(255,255,255,0.1)', color = '#f0f0f0'): React.CSSProperties => ({
+  display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%',
+  padding: '0.45rem 0.7rem', background: bg,
+  border: `1px solid ${border}`, borderRadius: '7px', color,
+  fontSize: '12.5px', fontWeight: 500, cursor: 'pointer',
+  textAlign: 'left', lineHeight: 1.25,
 });
 
+const dimmed: React.CSSProperties = { opacity: 0.45, pointerEvents: 'none' };
+
 // ── Component ─────────────────────────────────────────────────────────────────
-const WrapPanel = ({ onApplyWrap }: WrapPanelProps) => {
-  const [pickerColor, setPickerColor] = useState('#2563eb');
+
+const WrapPanel = ({
+  loading, pickMode, paintCount,
+  onSelectCar, onApplyWrap, onTogglePickMode, onClearPaintSet,
+}: WrapPanelProps) => {
+  const [pickerColor,   setPickerColor]   = useState('#2563eb');
+  const [selectedCarId, setSelectedCarId] = useState(DEFAULT_CAR_ID);
+
+  const handleCarChange = (id: string) => {
+    const car = CAR_MODELS.find(c => c.id === id);
+    if (!car || id === selectedCarId) return;
+    setSelectedCarId(id);
+    onSelectCar(car);
+  };
+
+  // Wrap controls need at least one panel selected to do anything useful
+  const wrapDisabled = loading || paintCount === 0;
 
   return (
     <div style={panel}>
 
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
-        <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#3b82f6' }} />
-        <span style={{ fontWeight: 600, fontSize: '13px', letterSpacing: '0.02em' }}>
-          Wrap Studio
-        </span>
-      </div>
-
-      {/* ── Custom color ── */}
-      <span style={sectionLabel}>Custom Color</span>
-      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'stretch' }}>
-
-        {/* Native color picker — opens OS color dialog */}
-        <label style={{ position: 'relative', flexShrink: 0, cursor: 'pointer' }}>
+      {/* ── Header ── */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <div style={{
-            width:        '42px',
-            height:       '100%',
-            minHeight:    '34px',
-            borderRadius: '8px',
-            background:   pickerColor,
-            border:       '1px solid rgba(255,255,255,0.15)',
-            boxSizing:    'border-box',
+            width: 8, height: 8, borderRadius: '50%',
+            background: loading ? '#f59e0b' : pickMode ? '#22c55e' : '#3b82f6',
+            transition: 'background 0.25s',
           }} />
-          <input
-            type="color"
-            value={pickerColor}
-            onChange={(e) => setPickerColor(e.target.value)}
-            style={{ position: 'absolute', opacity: 0, inset: 0, cursor: 'pointer', width: '100%', height: '100%' }}
-          />
-        </label>
-
-        <button
-          onClick={() => onApplyWrap({ type: 'solid', color: pickerColor })}
-          style={{ ...btn('rgba(37,99,235,0.25)', 'rgba(37,99,235,0.5)'), flex: 1, justifyContent: 'center' }}
-        >
-          Apply Matte
-        </button>
-
-        <button
-          onClick={() => onApplyWrap({ type: 'metallic', color: pickerColor })}
-          style={{ ...btn('rgba(80,80,80,0.3)', 'rgba(180,180,180,0.2)'), flex: 1, justifyContent: 'center' }}
-        >
-          Metallic
-        </button>
+          <span style={{ fontWeight: 600, fontSize: '13px' }}>Wrap Studio</span>
+        </div>
+        {loading && <span style={{ fontSize: '11px', color: '#f59e0b' }}>Loading…</span>}
       </div>
 
-      <div style={divider} />
-
-      {/* ── Presets ── */}
-      <span style={sectionLabel}>Presets</span>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-        {PRESETS.map((preset) => (
-          <button
-            key={preset.label}
-            onClick={() => onApplyWrap(preset.config)}
-            style={btn('rgba(255,255,255,0.04)')}
-          >
-            {/* Color swatch */}
-            <span style={{
-              display:      'inline-block',
-              width:        '14px',
-              height:       '14px',
-              borderRadius: '3px',
-              background:   preset.swatch,
-              flexShrink:   0,
-              border:       '1px solid rgba(255,255,255,0.15)',
-              // Carbon swatch gets a diagonal stripe pattern
-              backgroundImage: preset.config.type === 'carbon'
-                ? 'repeating-linear-gradient(45deg,#333 0,#333 2px,#111 2px,#111 6px)'
-                : undefined,
-            }} />
-            {preset.label}
-          </button>
-        ))}
-      </div>
-
-      <div style={divider} />
-
-      {/* ── Reset ── */}
-      <button
-        onClick={() => onApplyWrap({ type: 'reset' })}
+      {/* ── Vehicle selector ── */}
+      <span style={label}>Vehicle</span>
+      <select
+        value={selectedCarId}
+        onChange={e => handleCarChange(e.target.value)}
+        disabled={loading}
         style={{
-          ...btn('rgba(255,255,255,0.03)', 'rgba(255,255,255,0.07)'),
-          justifyContent: 'center',
-          color:          '#888',
+          width: '100%', padding: '0.45rem 0.6rem',
+          background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)',
+          borderRadius: '7px', color: loading ? '#666' : '#f0f0f0',
+          fontSize: '12.5px', cursor: loading ? 'not-allowed' : 'pointer',
+          outline: 'none', appearance: 'auto',
         }}
       >
-        ↺  Reset to Original
-      </button>
+        {Array.from(CAR_MODELS_BY_CATEGORY.entries()).map(([cat, cars]) => (
+          <optgroup key={cat} label={cat}>
+            {cars.map(car => (
+              <option key={car.id} value={car.id} style={{ background: '#1a1a1a' }}>
+                {car.name}
+              </option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
+
+      <div style={divider} />
+
+      {/* ── Paint-set / pick mode ── */}
+      <span style={label}>Paint Panels</span>
+
+      <div style={loading ? dimmed : {}}>
+        {/* Pick-mode toggle */}
+        <button
+          onClick={onTogglePickMode}
+          style={btn(
+            pickMode ? 'rgba(34,197,94,0.2)' : 'rgba(255,255,255,0.05)',
+            pickMode ? 'rgba(34,197,94,0.6)' : 'rgba(255,255,255,0.1)',
+            pickMode ? '#86efac' : '#f0f0f0',
+          )}
+        >
+          🖌
+          <span style={{ flex: 1 }}>{pickMode ? 'Picking ON — click a panel' : 'Pick panels'}</span>
+          {paintCount > 0 && (
+            <span style={{
+              background: 'rgba(59,130,246,0.25)', border: '1px solid rgba(59,130,246,0.5)',
+              borderRadius: '10px', padding: '0 6px', fontSize: '11px',
+              color: '#93c5fd', fontWeight: 700, flexShrink: 0,
+            }}>
+              {paintCount}
+            </span>
+          )}
+        </button>
+
+        {/* Hint when pick mode is on */}
+        {pickMode && (
+          <p style={{ margin: '0.4rem 0 0', fontSize: '10.5px', color: '#666', lineHeight: 1.4 }}>
+            Click a panel to add/remove it. Drag to orbit as usual.
+          </p>
+        )}
+
+        {/* Clear selection */}
+        {paintCount > 0 && (
+          <button
+            onClick={onClearPaintSet}
+            style={{ ...btn('rgba(255,255,255,0.03)', 'rgba(255,255,255,0.07)', '#777'), marginTop: '0.35rem' }}
+          >
+            ✕  Clear selection
+          </button>
+        )}
+      </div>
+
+      <div style={divider} />
+
+      {/* ── Wrap controls ── */}
+      <div style={wrapDisabled ? dimmed : {}}>
+
+        {paintCount === 0 && !loading && (
+          <p style={{ margin: '0 0 0.7rem', fontSize: '11px', color: '#555', lineHeight: 1.4 }}>
+            Select panels above to enable wrap controls.
+          </p>
+        )}
+
+        {/* Custom color */}
+        <span style={label}>Custom Color</span>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'stretch' }}>
+          <label style={{ position: 'relative', flexShrink: 0, cursor: 'pointer' }}>
+            <div style={{
+              width: '42px', height: '100%', minHeight: '34px', borderRadius: '7px',
+              background: pickerColor, border: '1px solid rgba(255,255,255,0.15)', boxSizing: 'border-box',
+            }} />
+            <input
+              type="color"
+              value={pickerColor}
+              onChange={e => setPickerColor(e.target.value)}
+              style={{ position: 'absolute', opacity: 0, inset: 0, cursor: 'pointer', width: '100%', height: '100%' }}
+            />
+          </label>
+          <button
+            onClick={() => onApplyWrap({ type: 'solid', color: pickerColor })}
+            style={{ ...btn('rgba(37,99,235,0.25)', 'rgba(37,99,235,0.5)'), flex: 1, justifyContent: 'center' }}
+          >
+            Matte
+          </button>
+          <button
+            onClick={() => onApplyWrap({ type: 'metallic', color: pickerColor })}
+            style={{ ...btn('rgba(80,80,80,0.3)', 'rgba(180,180,180,0.2)'), flex: 1, justifyContent: 'center' }}
+          >
+            Metallic
+          </button>
+        </div>
+
+        <div style={divider} />
+
+        {/* Presets */}
+        <span style={label}>Presets</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.32rem' }}>
+          {PRESETS.map(preset => (
+            <button key={preset.label} onClick={() => onApplyWrap(preset.config)} style={btn('rgba(255,255,255,0.04)')}>
+              <span style={{
+                display: 'inline-block', width: 14, height: 14, borderRadius: 3, flexShrink: 0,
+                background: preset.swatch, border: '1px solid rgba(255,255,255,0.15)',
+                backgroundImage: preset.config.type === 'carbon'
+                  ? 'repeating-linear-gradient(45deg,#333 0,#333 2px,#111 2px,#111 6px)' : undefined,
+              }} />
+              {preset.label}
+            </button>
+          ))}
+        </div>
+
+        <div style={divider} />
+
+        {/* Reset */}
+        <button
+          onClick={() => onApplyWrap({ type: 'reset' })}
+          style={{ ...btn('rgba(255,255,255,0.03)', 'rgba(255,255,255,0.07)', '#777'), justifyContent: 'center' }}
+        >
+          ↺  Reset to Original
+        </button>
+      </div>
 
     </div>
   );

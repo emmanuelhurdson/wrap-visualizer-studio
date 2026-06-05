@@ -1,19 +1,41 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import ThreeScene, { type ThreeSceneHandle } from '@/components/ThreeScene';
 import WrapPanel from '@/components/WrapPanel';
+import type { CarModel } from '@/data/cars';
 
-// ThreeDemo owns the ref that bridges React UI → Three.js scene.
-// Neither child knows about the other — they communicate only through
-// the applyWrap() method on ThreeSceneHandle.
 const ThreeDemo = () => {
   const sceneRef = useRef<ThreeSceneHandle>(null);
+  const [loading,    setLoading]    = useState(false);
+  const [pickMode,   setPickMode]   = useState(false);
+  const [paintCount, setPaintCount] = useState(0);
+
+  const handleSelectCar = (car: CarModel) => {
+    // Exit pick mode on car switch — avoids stale crosshair cursor
+    if (pickMode) {
+      setPickMode(false);
+      sceneRef.current?.setPickMode(false);
+    }
+    setLoading(true);
+    sceneRef.current?.loadCar(car.path, () => setLoading(false));
+  };
+
+  const togglePickMode = () => {
+    const next = !pickMode;
+    setPickMode(next);
+    sceneRef.current?.setPickMode(next);
+  };
 
   return (
-    // position:relative so the WrapPanel (position:fixed) stacks above the canvas
     <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden' }}>
-      <ThreeScene ref={sceneRef} />
+      <ThreeScene ref={sceneRef} onPaintSetChange={setPaintCount} />
       <WrapPanel
-        onApplyWrap={(config) => sceneRef.current?.applyWrap(config)}
+        loading={loading}
+        pickMode={pickMode}
+        paintCount={paintCount}
+        onSelectCar={handleSelectCar}
+        onApplyWrap={cfg => sceneRef.current?.applyWrap(cfg)}
+        onTogglePickMode={togglePickMode}
+        onClearPaintSet={() => sceneRef.current?.clearPaintSet()}
       />
     </div>
   );
