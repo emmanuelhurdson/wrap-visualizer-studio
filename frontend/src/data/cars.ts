@@ -12,7 +12,7 @@ export const DEFAULT_CAR_ID = 'porsche-911';
 export const CAR_MODELS: CarModel[] = [
   // ── Coupe ──────────────────────────────────────────────────────────────────
   { id: 'porsche-911',    name: 'Porsche 911',          category: 'Coupe',    path: '/coupe/911.glb'         },
-  { id: 'cayenne',        name: 'Porsche Cayenne',       category: 'Coupe',    path: '/coupe/cayenne.glb'     },
+  { id: 'cayenne',        name: 'Porsche Cayenne',       category: 'Coupe',    path: '/coupe/cayene.glb'      },
   { id: 'bmw-i8',         name: 'BMW i8',                category: 'Coupe',    path: '/coupe/ibmw.glb'        },
   { id: 'bmw-m6',         name: 'BMW M6',                category: 'Coupe',    path: '/coupe/m6.glb'          },
   { id: 'audi-tt',        name: 'Audi TT',               category: 'Coupe',    path: '/coupe/tt.glb'          },
