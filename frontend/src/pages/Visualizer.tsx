@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
@@ -12,129 +12,86 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Car, Palette, Layers, Download, Share, Quote } from "lucide-react";
+import { Car, Palette, Download, Share, Quote } from "lucide-react";
+import ThreeScene, { type ThreeSceneHandle, type WrapConfig } from "@/components/ThreeScene";
+import { CAR_MODELS, CAR_MODELS_BY_CATEGORY, type CarModel } from "@/data/cars";
 
-const carModels = [
-  // Sports & Supercars (8)
-  { name: "BMW M3", image: "🏎️", category: "Sports" },
-  { name: "Audi R8", image: "🚗", category: "Supercar" },
-  { name: "Mercedes AMG GT", image: "🏁", category: "Sports" },
-  { name: "Porsche 911", image: "🏎️", category: "Sports" },
-  { name: "Lamborghini Huracan", image: "🏎️", category: "Supercar" },
-  { name: "Ford Mustang", image: "🚗", category: "Muscle" },
-  { name: "Chevrolet Corvette", image: "🏁", category: "Sports" },
-  { name: "Dodge Challenger", image: "🚗", category: "Muscle" },
+// ── Category icons ────────────────────────────────────────────────────────────
+const CAT_ICON: Record<string, string> = {
+  Coupe:      "🏎️",
+  Hatchback:  "🚗",
+  "Mini SUV": "🚙",
+  Pickup:     "🛻",
+  Sedan:      "🚘",
+  SUV:        "🚐",
+};
 
-  // SUVs (24)
-  { name: "Toyota RAV4", image: "🚙", category: "SUV" },
-  { name: "Honda CR-V", image: "🚙", category: "SUV" },
-  { name: "Mazda CX-5", image: "🚙", category: "SUV" },
-  { name: "Subaru Forester", image: "🚙", category: "SUV" },
-  { name: "Nissan Rogue", image: "🚙", category: "SUV" },
-  { name: "Hyundai Tucson", image: "🚙", category: "SUV" },
-  { name: "Kia Sportage", image: "🚙", category: "SUV" },
-  { name: "Ford Explorer", image: "🚙", category: "Large SUV" },
-  { name: "Jeep Grand Cherokee", image: "🚙", category: "SUV" },
-  { name: "Toyota 4Runner", image: "🚙", category: "Off-Road SUV" },
-  { name: "BMW X5", image: "🚙", category: "Luxury SUV" },
-  { name: "Mercedes GLE", image: "🚙", category: "Luxury SUV" },
-  { name: "Range Rover Sport", image: "🚙", category: "Luxury SUV" },
-  { name: "Audi Q7", image: "🚙", category: "Luxury SUV" },
-  { name: "Lexus RX", image: "🚙", category: "Luxury SUV" },
-  { name: "Cadillac Escalade", image: "🚙", category: "Premium SUV" },
-  { name: "Lincoln Navigator", image: "🚙", category: "Premium SUV" },
-  { name: "Jeep Wrangler", image: "🚙", category: "Off-Road SUV" },
-  { name: "Kia Sorento", image: "🚙", category: "SUV" },
-  { name: "Honda Pilot", image: "🚙", category: "Large SUV" },
-  { name: "Volkswagen Tiguan", image: "🚙", category: "SUV" },
-  { name: "Subaru Outback", image: "🚙", category: "SUV" },
-  { name: "Mazda CX-9", image: "🚙", category: "Large SUV" },
-  { name: "Hyundai Santa Fe", image: "🚙", category: "SUV" },
+// ── One quick-pick car from each category ─────────────────────────────────────
+const QUICK_PICKS: CarModel[] = Array.from(CAR_MODELS_BY_CATEGORY.values()).map(
+  (cars) => cars[0],
+);
 
-  // Pickups (12)
-  { name: "Ford F-150", image: "🛻", category: "Full-size Pickup" },
-  { name: "Chevrolet Silverado", image: "🛻", category: "Full-size Pickup" },
-  { name: "Ram 1500", image: "🛻", category: "Full-size Pickup" },
-  { name: "GMC Sierra", image: "🛻", category: "Full-size Pickup" },
-  { name: "Toyota Tundra", image: "🛻", category: "Full-size Pickup" },
-  { name: "Nissan Titan", image: "🛻", category: "Full-size Pickup" },
-  { name: "Toyota Tacoma", image: "🛻", category: "Mid-size Pickup" },
-  { name: "Ford Ranger", image: "🛻", category: "Mid-size Pickup" },
-  { name: "Chevrolet Colorado", image: "🛻", category: "Mid-size Pickup" },
-  { name: "GMC Canyon", image: "🛻", category: "Mid-size Pickup" },
-  { name: "Nissan Frontier", image: "🛻", category: "Mid-size Pickup" },
-  { name: "Jeep Gladiator", image: "🛻", category: "Off-Road Pickup" },
+// ── Wrap finishes with Three.js WrapConfig mapping ────────────────────────────
+type WrapFinish = {
+  name:       string;
+  color:      string;
+  type:       string;
+  price:      number;
+  wrapConfig: WrapConfig;
+};
 
-  // Sedans (10)
-  { name: "Toyota Mark X", image: "🚘", category: "Sedan" },
-  { name: "Toyota Camry", image: "🚘", category: "Sedan" },
-  { name: "Honda Accord", image: "🚘", category: "Sedan" },
-  { name: "Nissan Altima", image: "🚘", category: "Sedan" },
-  { name: "Hyundai Sonata", image: "🚘", category: "Sedan" },
-  { name: "Kia Optima", image: "🚘", category: "Sedan" },
-  { name: "BMW 3 Series", image: "🚘", category: "Luxury Sedan" },
-  { name: "Mercedes C-Class", image: "🚘", category: "Luxury Sedan" },
-  { name: "Audi A4", image: "🚘", category: "Luxury Sedan" },
-  { name: "Hyundai Elantra", image: "🚘", category: "Sedan" },
-
-  // Compacts & Hatchbacks (8)
-  { name: "Toyota Corolla", image: "🚗", category: "Compact" },
-  { name: "Honda Civic", image: "🚗", category: "Compact" },
-  { name: "Mazda 3", image: "🚗", category: "Compact" },
-  { name: "Volkswagen Golf", image: "🚗", category: "Hatchback" },
-  { name: "Subaru Impreza", image: "🚗", category: "Compact" },
-  { name: "Ford Focus", image: "🚗", category: "Hatchback" },
-  { name: "Kia Rio", image: "🚗", category: "Subcompact" },
-  { name: "Hyundai Accent", image: "🚗", category: "Subcompact" },
-
-  // Economy Cars (6)
-  { name: "Mitsubishi Mirage", image: "🚗", category: "Economy" },
-  { name: "Nissan Versa", image: "🚗", category: "Economy" },
-  { name: "Kia Forte", image: "🚗", category: "Economy" },
-  { name: "Chevrolet Spark", image: "🚗", category: "Economy" },
-  { name: "Toyota Yaris", image: "🚗", category: "Economy" },
-  { name: "Hyundai Venue", image: "🚗", category: "Economy" },
-
-  // Electric & Hybrid (12)
-  { name: "Tesla Model S", image: "⚡", category: "Electric Sedan" },
-  { name: "Tesla Model X", image: "⚡", category: "Electric SUV" },
-  { name: "Tesla Model Y", image: "⚡", category: "Electric SUV" },
-  { name: "Tesla Model 3", image: "⚡", category: "Electric Sedan" },
-  { name: "Ford Mustang Mach-E", image: "⚡", category: "Electric SUV" },
-  { name: "Rivian R1S", image: "⚡", category: "Electric SUV" },
-  { name: "Rivian R1T", image: "⚡", category: "Electric Pickup" },
-  { name: "Ford F-150 Lightning", image: "⚡", category: "Electric Pickup" },
-  { name: "Tesla Cybertruck", image: "⚡", category: "Electric Pickup" },
-  { name: "Toyota Prius", image: "🔋", category: "Hybrid" },
-  { name: "Jeep Wrangler 4xe", image: "🔌", category: "Hybrid SUV" },
-  { name: "Honda Insight", image: "🔋", category: "Hybrid" },
+const WRAP_FINISHES: WrapFinish[] = [
+  { name: "Matte Black",     color: "#1a1a1a", type: "Matte",    price: 2800, wrapConfig: { type: "solid",    color: "#1a1a1a" } },
+  { name: "Gloss White",     color: "#f0f0f0", type: "Gloss",    price: 2500, wrapConfig: { type: "metallic", color: "#f0f0f0" } },
+  { name: "Chrome Silver",   color: "#c0c0c0", type: "Chrome",   price: 4200, wrapConfig: { type: "metallic", color: "#c0c0c0" } },
+  { name: "Orange Burst",    color: "#ff6b35", type: "Gloss",    price: 2700, wrapConfig: { type: "solid",    color: "#ff6b35" } },
+  { name: "Midnight Blue",   color: "#191970", type: "Matte",    price: 2900, wrapConfig: { type: "solid",    color: "#191970" } },
+  { name: "Racing Red",      color: "#dc143c", type: "Gloss",    price: 2600, wrapConfig: { type: "metallic", color: "#dc143c" } },
+  { name: "Forest Green",    color: "#355e3b", type: "Matte",    price: 2900, wrapConfig: { type: "solid",    color: "#355e3b" } },
+  { name: "Gold Chrome",     color: "#ffd700", type: "Chrome",   price: 4500, wrapConfig: { type: "metallic", color: "#ffd700" } },
+  { name: "Purple Metallic", color: "#663399", type: "Metallic", price: 3200, wrapConfig: { type: "metallic", color: "#663399" } },
+  { name: "Carbon Fiber",    color: "#2c2c2c", type: "Textured", price: 3800, wrapConfig: { type: "carbon" } },
 ];
 
-const wrapFinishes = [
-  { name: "Matte Black", color: "#1a1a1a", type: "Matte", price: 2800 },
-  { name: "Gloss White", color: "#ffffff", type: "Gloss", price: 2500 },
-  { name: "Chrome Silver", color: "#c0c0c0", type: "Chrome", price: 4200 },
-  { name: "Orange Burst", color: "#ff6b35", type: "Gloss", price: 2700 },
-  { name: "Midnight Blue", color: "#191970", type: "Matte", price: 2900 },
-  { name: "Racing Red", color: "#dc143c", type: "Gloss", price: 2600 },
-  { name: "Forest Green", color: "#355e3b", type: "Matte", price: 2900 },
-  { name: "Gold Chrome", color: "#ffd700", type: "Chrome", price: 4500 },
-  { name: "Purple Metallic", color: "#663399", type: "Metallic", price: 3200 },
-  { name: "Carbon Fiber", color: "#2c2c2c", type: "Textured", price: 3800 },
-];
-
-const patterns = [
-  { name: "Solid Color", pattern: "solid" },
-  { name: "Carbon Fiber", pattern: "carbon" },
-  { name: "Racing Stripes", pattern: "stripes" },
-  { name: "Camo", pattern: "camo" },
-  { name: "Gradient", pattern: "gradient" },
-];
+// ── Component ─────────────────────────────────────────────────────────────────
 
 const Visualizer = () => {
-  const [selectedModel, setSelectedModel] = useState(carModels[0]);
-  const [selectedWrap, setSelectedWrap] = useState(wrapFinishes[0]);
-  const [selectedPattern, setSelectedPattern] = useState(patterns[0]);
+  const sceneRef = useRef<ThreeSceneHandle>(null);
+
+  // Starts true: ThreeScene auto-loads 911 on mount, wipePaintSet fires first
+  const [loading,      setLoading]      = useState(true);
+  const [selectedCar,  setSelectedCar]  = useState<CarModel>(CAR_MODELS[0]);
+  const [selectedWrap, setSelectedWrap] = useState<WrapFinish>(WRAP_FINISHES[0]);
+
+  // Stable ref so onPaintSetChange closure always reads the latest wrap
+  const selectedWrapRef = useRef(selectedWrap);
+  selectedWrapRef.current = selectedWrap;
+
+  // Called by ThreeScene whenever the paint-panel set changes:
+  //   count === 0  → wipePaintSet ran (new model starting)
+  //   count  > 0  → model loaded + auto-detected, ready to apply wrap
+  const handlePaintSetChange = (count: number) => {
+    if (count === 0) {
+      setLoading(true);
+    } else {
+      setLoading(false);
+      sceneRef.current?.applyWrap(selectedWrapRef.current.wrapConfig);
+    }
+  };
+
+  const handleSelectCar = (car: CarModel) => {
+    if (car.id === selectedCar.id) return;
+    setSelectedCar(car);
+    sceneRef.current?.loadCar(car.path);
+  };
+
+  const handleSelectWrap = (wrap: WrapFinish) => {
+    setSelectedWrap(wrap);
+    if (!loading) {
+      sceneRef.current?.applyWrap(wrap.wrapConfig);
+    }
+    // If loading, selectedWrapRef will be applied automatically once model finishes
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -155,14 +112,16 @@ const Visualizer = () => {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="grid lg:grid-cols-3 gap-8">
+
           {/* Controls Panel */}
           <div className="lg:col-span-1 space-y-6">
             <Tabs defaultValue="model" className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="model">Model</TabsTrigger>
                 <TabsTrigger value="wrap">Wrap</TabsTrigger>
               </TabsList>
 
+              {/* ── Model tab ──────────────────────────────────────────────── */}
               <TabsContent value="model" className="space-y-4">
                 <Card className="card-glass">
                   <CardHeader>
@@ -172,41 +131,46 @@ const Visualizer = () => {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
+                    {/* Full list dropdown */}
                     <Select
-                      value={selectedModel.name}
-                      onValueChange={(value) => {
-                        const model = carModels.find((m) => m.name === value);
-                        if (model) setSelectedModel(model);
+                      value={selectedCar.id}
+                      onValueChange={(id) => {
+                        const car = CAR_MODELS.find((m) => m.id === id);
+                        if (car) handleSelectCar(car);
                       }}
                     >
                       <SelectTrigger className="w-full">
                         <SelectValue placeholder="Choose your vehicle" />
                       </SelectTrigger>
                       <SelectContent>
-                        {carModels.map((model) => (
-                          <SelectItem key={model.name} value={model.name}>
-                            {model.image} {model.name} ({model.category})
+                        {CAR_MODELS.map((car) => (
+                          <SelectItem key={car.id} value={car.id}>
+                            {CAT_ICON[car.category] ?? "🚗"} {car.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
+
+                    {/* Quick-pick grid — one per category */}
                     <div className="mt-4 grid grid-cols-2 gap-2">
-                      {carModels.slice(0, 6).map((model) => (
+                      {QUICK_PICKS.map((car) => (
                         <button
-                          key={model.name}
-                          onClick={() => setSelectedModel(model)}
+                          key={car.id}
+                          onClick={() => handleSelectCar(car)}
                           className={`p-3 rounded-lg border-2 transition-all text-left ${
-                            selectedModel.name === model.name
+                            selectedCar.id === car.id
                               ? "border-primary bg-primary/10"
                               : "border-border bg-card hover:border-primary/50"
                           }`}
                         >
-                          <div className="text-2xl mb-1">{model.image}</div>
-                          <div className="text-sm font-medium">
-                            {model.name}
+                          <div className="text-2xl mb-1">
+                            {CAT_ICON[car.category] ?? "🚗"}
                           </div>
-                          <Badge variant="secondary" className="text-xs">
-                            {model.category}
+                          <div className="text-sm font-medium leading-tight">
+                            {car.name}
+                          </div>
+                          <Badge variant="secondary" className="text-xs mt-1">
+                            {car.category}
                           </Badge>
                         </button>
                       ))}
@@ -215,6 +179,7 @@ const Visualizer = () => {
                 </Card>
               </TabsContent>
 
+              {/* ── Wrap tab ───────────────────────────────────────────────── */}
               <TabsContent value="wrap" className="space-y-4">
                 <Card className="card-glass">
                   <CardHeader>
@@ -225,10 +190,10 @@ const Visualizer = () => {
                   </CardHeader>
                   <CardContent>
                     <div className="grid grid-cols-1 gap-3 max-h-96 overflow-y-auto">
-                      {wrapFinishes.map((wrap) => (
+                      {WRAP_FINISHES.map((wrap) => (
                         <button
                           key={wrap.name}
-                          onClick={() => setSelectedWrap(wrap)}
+                          onClick={() => handleSelectWrap(wrap)}
                           className={`p-4 rounded-lg border-2 transition-all flex items-center space-x-3 ${
                             selectedWrap.name === wrap.name
                               ? "border-primary bg-primary/10"
@@ -245,37 +210,9 @@ const Visualizer = () => {
                               {wrap.type}
                             </div>
                             <div className="text-sm font-bold text-primary">
-                              ${wrap.price}
+                              ${wrap.price.toLocaleString()}
                             </div>
                           </div>
-                        </button>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="pattern" className="space-y-4">
-                <Card className="card-glass">
-                  <CardHeader>
-                    <CardTitle className="flex items-center">
-                      <Layers className="mr-2 w-5 h-5 text-primary" />
-                      Pattern Style
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      {patterns.map((pattern) => (
-                        <button
-                          key={pattern.name}
-                          onClick={() => setSelectedPattern(pattern)}
-                          className={`w-full p-4 rounded-lg border-2 transition-all text-left ${
-                            selectedPattern.name === pattern.name
-                              ? "border-primary bg-primary/10"
-                              : "border-border bg-card hover:border-primary/50"
-                          }`}
-                        >
-                          <div className="font-medium">{pattern.name}</div>
                         </button>
                       ))}
                     </div>
@@ -291,7 +228,7 @@ const Visualizer = () => {
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle>Live Preview</CardTitle>
-                  <div className="flex space-x-2">
+                  <div className="flex items-center space-x-2">
                     <Button variant="outline" size="sm">
                       <Download className="w-4 h-4 mr-2" />
                       Save
@@ -304,42 +241,18 @@ const Visualizer = () => {
                 </div>
               </CardHeader>
               <CardContent className="space-y-6">
-                {/* 3D Preview Area */}
-                <div className="relative">
-                  <div
-                    className="w-full h-96 rounded-xl flex items-center justify-center text-9xl relative overflow-hidden"
-                    style={{
-                      backgroundColor: selectedWrap.color,
-                      boxShadow: `0 25px 50px -12px ${selectedWrap.color}40`,
-                      backgroundImage:
-                        selectedPattern.pattern === "stripes"
-                          ? `repeating-linear-gradient(45deg, transparent, transparent 20px, rgba(255,255,255,0.1) 20px, rgba(255,255,255,0.1) 40px)`
-                          : selectedPattern.pattern === "carbon"
-                          ? `radial-gradient(circle at 25% 25%, rgba(255,255,255,0.1) 2px, transparent 2px),
-                         radial-gradient(circle at 75% 75%, rgba(255,255,255,0.1) 2px, transparent 2px)`
-                          : "none",
-                    }}
-                  >
-                    <div className="text-white/20 font-bold transform hover:scale-110 transition-transform">
-                      {selectedModel.image}
+
+                {/* 3D Preview */}
+                <div className="relative rounded-xl overflow-hidden bg-[#1a1a1a]" style={{ height: "460px" }}>
+                  <ThreeScene ref={sceneRef} onPaintSetChange={handlePaintSetChange} />
+
+                  {/* Loading overlay */}
+                  {loading && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm pointer-events-none">
+                      <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin mb-3" />
+                      <p className="text-white/70 text-sm">Loading model…</p>
                     </div>
-
-                    {/* Finish Type Badge */}
-                    <Badge
-                      className="absolute top-4 right-4 bg-background/90 text-foreground"
-                      variant="secondary"
-                    >
-                      {selectedWrap.type} Finish
-                    </Badge>
-
-                    {/* Pattern Badge */}
-                    <Badge
-                      className="absolute top-4 left-4 bg-background/90 text-foreground"
-                      variant="secondary"
-                    >
-                      {selectedPattern.name}
-                    </Badge>
-                  </div>
+                  )}
                 </div>
 
                 {/* Configuration Summary */}
@@ -349,19 +262,15 @@ const Visualizer = () => {
                     <div className="space-y-1 text-sm">
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Vehicle:</span>
-                        <span className="font-medium">
-                          {selectedModel.name}
-                        </span>
+                        <span className="font-medium">{selectedCar.name}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Category:</span>
+                        <span className="font-medium">{selectedCar.category}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Wrap:</span>
                         <span className="font-medium">{selectedWrap.name}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Pattern:</span>
-                        <span className="font-medium">
-                          {selectedPattern.name}
-                        </span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Finish:</span>
@@ -374,35 +283,20 @@ const Visualizer = () => {
                     <h3 className="font-bold text-lg">Pricing</h3>
                     <div className="space-y-1 text-sm">
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">
-                          Base Wrap:
-                        </span>
+                        <span className="text-muted-foreground">Base Wrap:</span>
                         <span className="font-medium">
-                          ${selectedWrap.price}
+                          ${selectedWrap.price.toLocaleString()}
                         </span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">
-                          Installation:
-                        </span>
+                        <span className="text-muted-foreground">Installation:</span>
                         <span className="font-medium">$500</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">
-                          Pattern Add-on:
-                        </span>
-                        <span className="font-medium">
-                          ${selectedPattern.pattern === "solid" ? 0 : 300}
-                        </span>
                       </div>
                       <div className="border-t border-border pt-2 mt-2">
                         <div className="flex justify-between font-bold text-lg">
                           <span>Total:</span>
                           <span className="text-primary">
-                            $
-                            {selectedWrap.price +
-                              500 +
-                              (selectedPattern.pattern === "solid" ? 0 : 300)}
+                            ${(selectedWrap.price + 500).toLocaleString()}
                           </span>
                         </div>
                       </div>

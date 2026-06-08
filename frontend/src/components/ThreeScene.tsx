@@ -214,7 +214,7 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ onPaintSetCh
     // ── Renderer ──────────────────────────────────────────────────────────────
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setSize(canvas.clientWidth || window.innerWidth, canvas.clientHeight || window.innerHeight, false);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type    = THREE.PCFSoftShadowMap;
     renderer.toneMapping         = THREE.ACESFilmicToneMapping;
@@ -229,7 +229,11 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ onPaintSetCh
     scene.background = new THREE.Color(0x1a1a1a); // placeholder until HDRI loads
 
     // ── Camera ────────────────────────────────────────────────────────────────
-    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
+    const camera = new THREE.PerspectiveCamera(
+      60,
+      (canvas.clientWidth || window.innerWidth) / (canvas.clientHeight || window.innerHeight),
+      0.1, 200,
+    );
 
     // ── Lights ────────────────────────────────────────────────────────────────
     const ambientLight = new THREE.AmbientLight(0xffe8cc, 0.35);
@@ -769,12 +773,16 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ onPaintSetCh
 
     // ── Resize + animate ──────────────────────────────────────────────────────
 
-    const onResize = () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
+    // ResizeObserver makes the canvas size-aware of its CSS container so ThreeScene
+    // works both full-page (ThreeDemo, height:100vh) and embedded (Visualizer, fixed-height div).
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      if (width < 1 || height < 1) return;
+      camera.aspect = width / height;
       camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-    };
-    window.addEventListener('resize', onResize);
+      renderer.setSize(width, height, false);
+    });
+    observer.observe(canvas);
 
     let frameId: number;
     const animate = () => {
@@ -792,7 +800,7 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ onPaintSetCh
       mounted = false;
       loadModelRef.current = applyWrapRef.current = pickModeActionsRef.current = envActionsRef.current = null;
       cancelAnimationFrame(frameId);
-      window.removeEventListener('resize', onResize);
+      observer.disconnect();
       canvas.removeEventListener('mousedown', onMouseDown);
       canvas.removeEventListener('click', onClick);
       controls.dispose();
@@ -814,7 +822,7 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ onPaintSetCh
     };
   }, []);
 
-  return <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100vh' }} />;
+  return <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%' }} />;
 });
 
 ThreeScene.displayName = 'ThreeScene';
