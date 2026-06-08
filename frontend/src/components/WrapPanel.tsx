@@ -1,21 +1,29 @@
 import { useState } from 'react';
 import { CAR_MODELS, CAR_MODELS_BY_CATEGORY, DEFAULT_CAR_ID, type CarModel } from '@/data/cars';
-import type { WrapConfig } from './ThreeScene';
+import type { WrapConfig, EnvironmentMode } from './ThreeScene';
 
 interface WrapPanelProps {
   loading:          boolean;
   pickMode:         boolean;
   paintCount:       number;
+  envMode:          EnvironmentMode;
   onSelectCar:      (car: CarModel) => void;
   onApplyWrap:      (config: WrapConfig) => void;
   onTogglePickMode: () => void;
   onClearPaintSet:  () => void;
+  onSetEnvironment: (env: EnvironmentMode) => void;
 }
 
 const PRESETS: { label: string; swatch: string; config: WrapConfig }[] = [
   { label: 'Matte Black',  swatch: '#1a1a1a', config: { type: 'solid',    color: '#1a1a1a' } },
   { label: 'Metallic Red', swatch: '#b91c1c', config: { type: 'metallic', color: '#b91c1c' } },
   { label: 'Carbon Fiber', swatch: '#222222', config: { type: 'carbon' } },
+];
+
+const ENV_OPTIONS: { id: EnvironmentMode; icon: string; label: string }[] = [
+  { id: 'garage', icon: '🏭', label: 'Garage' },
+  { id: 'studio', icon: '💡', label: 'Studio' },
+  { id: 'solid',  icon: '⬛', label: 'Dark'   },
 ];
 
 // ── Style helpers ─────────────────────────────────────────────────────────────
@@ -30,7 +38,7 @@ const panel: React.CSSProperties = {
   fontSize: '13px', boxShadow: '0 8px 32px rgba(0,0,0,0.6)', userSelect: 'none',
 };
 
-const label: React.CSSProperties = {
+const sectionLabel: React.CSSProperties = {
   display: 'block', fontSize: '10px', fontWeight: 600,
   letterSpacing: '0.1em', textTransform: 'uppercase', color: '#555', marginBottom: '0.45rem',
 };
@@ -52,8 +60,8 @@ const dimmed: React.CSSProperties = { opacity: 0.45, pointerEvents: 'none' };
 // ── Component ─────────────────────────────────────────────────────────────────
 
 const WrapPanel = ({
-  loading, pickMode, paintCount,
-  onSelectCar, onApplyWrap, onTogglePickMode, onClearPaintSet,
+  loading, pickMode, paintCount, envMode,
+  onSelectCar, onApplyWrap, onTogglePickMode, onClearPaintSet, onSetEnvironment,
 }: WrapPanelProps) => {
   const [pickerColor,   setPickerColor]   = useState('#2563eb');
   const [selectedCarId, setSelectedCarId] = useState(DEFAULT_CAR_ID);
@@ -65,7 +73,6 @@ const WrapPanel = ({
     onSelectCar(car);
   };
 
-  // Wrap controls need at least one panel selected to do anything useful
   const wrapDisabled = loading || paintCount === 0;
 
   return (
@@ -84,8 +91,34 @@ const WrapPanel = ({
         {loading && <span style={{ fontSize: '11px', color: '#f59e0b' }}>Loading…</span>}
       </div>
 
+      {/* ── Scene / Environment ── */}
+      <span style={sectionLabel}>Scene</span>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.3rem' }}>
+        {ENV_OPTIONS.map(opt => (
+          <button
+            key={opt.id}
+            onClick={() => onSetEnvironment(opt.id)}
+            style={{
+              padding: '0.4rem 0',
+              background: envMode === opt.id ? 'rgba(59,130,246,0.22)' : 'rgba(255,255,255,0.04)',
+              border: `1px solid ${envMode === opt.id ? 'rgba(59,130,246,0.55)' : 'rgba(255,255,255,0.09)'}`,
+              borderRadius: '7px',
+              color: envMode === opt.id ? '#93c5fd' : '#777',
+              fontSize: '11px', fontWeight: envMode === opt.id ? 600 : 400,
+              cursor: 'pointer', textAlign: 'center',
+              transition: 'background 0.18s, border-color 0.18s, color 0.18s',
+            }}
+          >
+            <div style={{ fontSize: '13px', marginBottom: '2px', lineHeight: 1 }}>{opt.icon}</div>
+            {opt.label}
+          </button>
+        ))}
+      </div>
+
+      <div style={divider} />
+
       {/* ── Vehicle selector ── */}
-      <span style={label}>Vehicle</span>
+      <span style={sectionLabel}>Vehicle</span>
       <select
         value={selectedCarId}
         onChange={e => handleCarChange(e.target.value)}
@@ -112,10 +145,9 @@ const WrapPanel = ({
       <div style={divider} />
 
       {/* ── Paint-set / pick mode ── */}
-      <span style={label}>Paint Panels</span>
+      <span style={sectionLabel}>Paint Panels</span>
 
       <div style={loading ? dimmed : {}}>
-        {/* Pick-mode toggle */}
         <button
           onClick={onTogglePickMode}
           style={btn(
@@ -137,14 +169,12 @@ const WrapPanel = ({
           )}
         </button>
 
-        {/* Hint when pick mode is on */}
         {pickMode && (
           <p style={{ margin: '0.4rem 0 0', fontSize: '10.5px', color: '#666', lineHeight: 1.4 }}>
             Click a panel to add/remove it. Drag to orbit as usual.
           </p>
         )}
 
-        {/* Clear selection */}
         {paintCount > 0 && (
           <button
             onClick={onClearPaintSet}
@@ -166,8 +196,7 @@ const WrapPanel = ({
           </p>
         )}
 
-        {/* Custom color */}
-        <span style={label}>Custom Color</span>
+        <span style={sectionLabel}>Custom Color</span>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'stretch' }}>
           <label style={{ position: 'relative', flexShrink: 0, cursor: 'pointer' }}>
             <div style={{
@@ -197,8 +226,7 @@ const WrapPanel = ({
 
         <div style={divider} />
 
-        {/* Presets */}
-        <span style={label}>Presets</span>
+        <span style={sectionLabel}>Presets</span>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.32rem' }}>
           {PRESETS.map(preset => (
             <button key={preset.label} onClick={() => onApplyWrap(preset.config)} style={btn('rgba(255,255,255,0.04)')}>
@@ -215,7 +243,6 @@ const WrapPanel = ({
 
         <div style={divider} />
 
-        {/* Reset */}
         <button
           onClick={() => onApplyWrap({ type: 'reset' })}
           style={{ ...btn('rgba(255,255,255,0.03)', 'rgba(255,255,255,0.07)', '#777'), justifyContent: 'center' }}
