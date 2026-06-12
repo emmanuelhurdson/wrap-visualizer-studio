@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Car, Palette, Download, Share } from "lucide-react";
+import { Car, Palette, Download, Share, Search } from "lucide-react";
 import ThreeScene, { type ThreeSceneHandle, type WrapConfig } from "@/components/ThreeScene";
 import { CAR_MODELS, CAR_MODELS_BY_CATEGORY, type CarModel } from "@/data/cars";
 
@@ -33,25 +33,36 @@ type WrapFinish = {
   name:       string;
   color:      string;
   type:       string;
+  style:      'solid' | 'shift' | 'pearl' | 'ppf';
   price:      number;
   wrapConfig: WrapConfig;
 };
 
 const WRAP_CATEGORIES = ["Gloss", "Satin", "Matte"] as const;
+const WRAP_STYLES = ["All", "Solid", "Shift", "Pearl", "PPF"] as const;
 
 type WrapCategory = (typeof WRAP_CATEGORIES)[number];
+type WrapStyle = (typeof WRAP_STYLES)[number];
 
 const WRAP_FINISHES: WrapFinish[] = [
-  { name: "Gloss White",     color: "#f0f0f0", type: "Gloss", price: 2500, wrapConfig: { type: "metallic", color: "#f0f0f0" } },
-  { name: "Gloss Red",       color: "#dc143c", type: "Gloss", price: 2600, wrapConfig: { type: "metallic", color: "#dc143c" } },
-  { name: "Gloss Silver",    color: "#c0c0c0", type: "Gloss", price: 4200, wrapConfig: { type: "metallic", color: "#c0c0c0" } },
-  { name: "Satin Steel",     color: "#8b8d90", type: "Satin", price: 3000, wrapConfig: { type: "solid", color: "#8b8d90" } },
-  { name: "Satin Midnight",  color: "#283149", type: "Satin", price: 3200, wrapConfig: { type: "solid", color: "#283149" } },
-  { name: "Satin Pearl",     color: "#e8eaf6", type: "Satin", price: 3000, wrapConfig: { type: "solid", color: "#e8eaf6" } },
-  { name: "Matte Black",     color: "#1a1a1a", type: "Matte", price: 2800, wrapConfig: { type: "solid", color: "#1a1a1a" } },
-  { name: "Matte Blue",      color: "#191970", type: "Matte", price: 2900, wrapConfig: { type: "solid", color: "#191970" } },
-  { name: "Matte Green",     color: "#355e3b", type: "Matte", price: 2900, wrapConfig: { type: "solid", color: "#355e3b" } },
-  { name: "Carbon Fiber",    color: "#2c2c2c", type: "Matte", price: 3800, wrapConfig: { type: "carbon" } },
+  { name: "Gloss White",     color: "#f0f0f0", type: "Gloss", style: "solid", price: 2500, wrapConfig: { type: "metallic", color: "#f0f0f0" } },
+  { name: "Gloss Red",       color: "#dc143c", type: "Gloss", style: "solid", price: 2600, wrapConfig: { type: "metallic", color: "#dc143c" } },
+  { name: "Gloss Silver",    color: "#c0c0c0", type: "Gloss", style: "shift", price: 4200, wrapConfig: { type: "metallic", color: "#c0c0c0" } },
+  { name: "Satin Steel",     color: "#8b8d90", type: "Satin", style: "solid", price: 3000, wrapConfig: { type: "solid", color: "#8b8d90" } },
+  { name: "Satin Midnight",  color: "#283149", type: "Satin", style: "solid", price: 3200, wrapConfig: { type: "solid", color: "#283149" } },
+  { name: "Satin Pearl",     color: "#e8eaf6", type: "Satin", style: "pearl", price: 3000, wrapConfig: { type: "solid", color: "#e8eaf6" } },
+  { name: "Matte Black",     color: "#1a1a1a", type: "Matte", style: "solid", price: 2800, wrapConfig: { type: "solid", color: "#1a1a1a" } },
+  { name: "Matte Blue",      color: "#191970", type: "Matte", style: "solid", price: 2900, wrapConfig: { type: "solid", color: "#191970" } },
+  { name: "Matte Green",     color: "#355e3b", type: "Matte", style: "solid", price: 2900, wrapConfig: { type: "solid", color: "#355e3b" } },
+  { name: "Carbon Fiber",    color: "#2c2c2c", type: "Matte", style: "ppf", price: 3800, wrapConfig: { type: "carbon" } },
+];
+
+const TINT_PRESETS = [
+  { name: 'Limo Black', color: '#14171d' },
+  { name: 'Dark Smoke', color: '#232b34' },
+  { name: 'Medium Smoke', color: '#4b5661' },
+  { name: 'Light Smoke', color: '#7a8897' },
+  { name: 'Ceramic Smoke', color: '#1d232a' },
 ];
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -64,27 +75,31 @@ const Visualizer = () => {
   const [selectedCar,  setSelectedCar]  = useState<CarModel>(CAR_MODELS[0]);
   const [selectedWrap, setSelectedWrap] = useState<WrapFinish>(WRAP_FINISHES[0]);
   const [selectedWrapCategory, setSelectedWrapCategory] = useState<WrapCategory>("Gloss");
-  const [customColor, setCustomColor]   = useState('#ff3b30');
+  const [selectedWrapStyle, setSelectedWrapStyle] = useState<WrapStyle>("All");
+  const [selectedTintColor, setSelectedTintColor] = useState('#232b34');
+  const [activeTintColor, setActiveTintColor] = useState<string | null>(null);
 
-  const customColorWrap: WrapFinish = {
-    name: 'Custom Color',
-    color: customColor,
-    type: 'Matte',
-    price: 0,
-    wrapConfig: { type: 'solid', color: customColor },
-  };
-
-  const handleSelectCustomColor = (): void => {
-    const wrap = { ...customColorWrap, wrapConfig: { type: 'solid', color: customColor } };
-    setSelectedWrap(wrap);
-    if (!loading) sceneRef.current?.applyWrap(wrap.wrapConfig);
-  };
-
-  const wrapOptions = WRAP_FINISHES.filter((wrap) => wrap.type === selectedWrapCategory);
-
-  // Stable ref so onPaintSetChange closure always reads the latest wrap
   const selectedWrapRef = useRef(selectedWrap);
   selectedWrapRef.current = selectedWrap;
+
+  const handleApplyTint = (): void => {
+    if (!loading) {
+      setActiveTintColor(selectedTintColor);
+      sceneRef.current?.applyWindowTint(selectedTintColor);
+    }
+  };
+
+  const handleResetTint = (): void => {
+    if (!loading) {
+      setActiveTintColor(null);
+      sceneRef.current?.applyWindowTint(null);
+    }
+  };
+
+  const wrapOptions = WRAP_FINISHES.filter((wrap) =>
+    wrap.type === selectedWrapCategory &&
+    (selectedWrapStyle === 'All' || wrap.style === selectedWrapStyle.toLowerCase()),
+  );
 
   // Called by ThreeScene whenever the paint-panel set changes:
   //   count === 0  → wipePaintSet ran (new model starting)
@@ -95,6 +110,9 @@ const Visualizer = () => {
     } else {
       setLoading(false);
       sceneRef.current?.applyWrap(selectedWrapRef.current.wrapConfig);
+      if (activeTintColor) {
+        sceneRef.current?.applyWindowTint(activeTintColor);
+      }
     }
   };
 
@@ -169,6 +187,7 @@ const Visualizer = () => {
                     <div className="flex items-center gap-2 py-4 text-base font-medium">
                       <Car className="w-5 h-5 text-primary" />
                       Switch Model
+                      <Search className="w-4 h-4 text-muted-foreground" />
                     </div>
                   </AccordionTrigger>
                   <AccordionContent className="px-5 pt-0">
@@ -236,7 +255,7 @@ const Visualizer = () => {
                   </AccordionTrigger>
                   <AccordionContent className="px-5 pt-0">
                     <div className="space-y-6 pb-4">
-                      <div className="flex gap-2 flex-wrap">
+                      <div className="flex flex-wrap gap-2">
                         {WRAP_CATEGORIES.map((category) => (
                           <button
                             key={category}
@@ -248,6 +267,22 @@ const Visualizer = () => {
                             }`}
                           >
                             {category}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        {WRAP_STYLES.map((style) => (
+                          <button
+                            key={style}
+                            onClick={() => setSelectedWrapStyle(style)}
+                            className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                              selectedWrapStyle === style
+                                ? 'bg-primary text-primary-foreground'
+                                : 'border border-border bg-card text-muted-foreground hover:border-primary'
+                            }`}
+                          >
+                            {style}
                           </button>
                         ))}
                       </div>
@@ -288,26 +323,47 @@ const Visualizer = () => {
                   </AccordionTrigger>
                   <AccordionContent className="px-5 pt-0">
                     <div className="space-y-6 pb-4">
-                      <div className="rounded-2xl border border-border bg-muted/10 p-4">
-                        <div className="text-sm font-semibold text-muted-foreground mb-3">
-                          Full color wheel
-                        </div>
-                        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-                          <input
-                            type="color"
-                            value={customColor}
-                            onChange={(e) => setCustomColor(e.target.value)}
-                            className="h-12 w-12 rounded-lg border border-border p-0"
-                          />
-                          <div className="flex-1 text-sm text-muted-foreground">
-                            Choose a hue to tint the wrap without changing the section layout.
+                      <div className="rounded-2xl border border-border bg-muted/10 p-4 space-y-6">
+                        <div className="space-y-2">
+                          <div className="text-sm font-semibold text-foreground">Window tint</div>
+                          <div className="text-sm text-muted-foreground">
+                            Select authentic automotive window tint shades. No generic wrap colors.
                           </div>
                         </div>
-                      </div>
 
-                      <Button className="w-full btn-secondary" onClick={handleSelectCustomColor}>
-                        Apply Tint
-                      </Button>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {TINT_PRESETS.map((preset) => (
+                            <button
+                              key={preset.name}
+                              onClick={() => setSelectedTintColor(preset.color)}
+                              className={`flex items-center justify-between rounded-full border px-4 py-3 text-sm font-medium transition ${
+                                selectedTintColor === preset.color
+                                  ? 'border-primary bg-primary/10 text-primary'
+                                  : 'border-border bg-card text-muted-foreground hover:border-primary/50'
+                              }`}
+                            >
+                              <span>{preset.name}</span>
+                              <span
+                                className="inline-block h-4 w-10 rounded-full border border-border"
+                                style={{ backgroundColor: preset.color }}
+                              />
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <Button className="w-full btn-secondary" onClick={handleApplyTint}>
+                            Apply Tint
+                          </Button>
+                          <Button variant="outline" className="w-full" onClick={handleResetTint}>
+                            Clear Tint
+                          </Button>
+                        </div>
+
+                        <div className="text-xs text-muted-foreground">
+                          Tint is applied to windows and glass surfaces only. Wrap finishes stay unchanged.
+                        </div>
+                      </div>
                     </div>
                   </AccordionContent>
                 </AccordionItem>

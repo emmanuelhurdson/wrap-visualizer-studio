@@ -41,11 +41,12 @@ export type WrapConfig =
 export type EnvironmentMode = 'garage' | 'studio' | 'solid';
 
 export type ThreeSceneHandle = {
-  applyWrap:      (config: WrapConfig) => void;
-  loadCar:        (path: string, onDone?: () => void) => void;
-  setPickMode:    (on: boolean) => void;
-  clearPaintSet:  () => void;
-  setEnvironment: (env: EnvironmentMode) => void;
+  applyWrap:        (config: WrapConfig) => void;
+  loadCar:          (path: string, onDone?: () => void) => void;
+  setPickMode:      (on: boolean) => void;
+  clearPaintSet:    () => void;
+  setEnvironment:   (env: EnvironmentMode) => void;
+  applyWindowTint:  (color: string | null) => void;
 };
 
 // ── Internal types ────────────────────────────────────────────────────────────
@@ -58,9 +59,12 @@ type OriginalMatSnapshot = {
   emissive:          THREE.Color;
   emissiveIntensity: number;
   envMapIntensity:   number;
+  transparent:       boolean;
+  opacity:           number;
 };
 
 type PaintEntry = { mesh: THREE.Mesh; originalSnapshot: OriginalMatSnapshot };
+type WindowTintEntry = { mesh: THREE.Mesh; originalSnapshot: OriginalMatSnapshot };
 
 type CarSavedState = { meshNames: string[]; lastConfig: WrapConfig | null };
 
@@ -79,6 +83,11 @@ const BODY_EXCLUDE = [
   'shadow', 'floor', 'ground', 'carpet', 'interior', 'seat', 'dash',
   'steer', 'leather', 'upholstery', 'screen', 'monitor', 'gauge',
   'underbody', 'undercarrier', 'frame', 'chassis',
+];
+
+const WINDOW_TINT_TARGETS = [
+  'glass', 'window', 'windshield', 'windscreen', 'rearwindow',
+  'moonroof', 'sunroof', 'sidewindow', 'backglass', 'quarterglass',
 ];
 
 const BODY_INCLUDE_STRONG = [
@@ -314,6 +323,8 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ onPaintSetCh
 
   const paintSetRef        = useRef<Map<string, PaintEntry>>(new Map());
   const carbonTexRef       = useRef<THREE.CanvasTexture | null>(null);
+  const windowTintRef      = useRef<Map<string, WindowTintEntry>>(new Map());
+  const currentWindowTint  = useRef<string | null>(null);
   const lastConfigRef      = useRef<WrapConfig | null>(null);
   const currentCarPathRef  = useRef('/coupe/porsche-911.glb');
   const carSavedStatesRef  = useRef<Map<string, CarSavedState>>(new Map());
@@ -324,6 +335,7 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ onPaintSetCh
 
   const loadModelRef       = useRef<((path: string, onDone?: () => void) => void) | null>(null);
   const applyWrapRef       = useRef<((config: WrapConfig) => void) | null>(null);
+  const applyWindowTintRef = useRef<((color: string | null) => void) | null>(null);
   const pickModeActionsRef = useRef<{ setPickMode: (on: boolean) => void; clearPaintSet: () => void } | null>(null);
   const envActionsRef      = useRef<{ setEnvironment: (env: EnvironmentMode) => void } | null>(null);
 
@@ -334,6 +346,7 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ onPaintSetCh
     setPickMode:    (on)         => pickModeActionsRef.current?.setPickMode(on),
     clearPaintSet:  ()           => pickModeActionsRef.current?.clearPaintSet(),
     setEnvironment: (env)        => envActionsRef.current?.setEnvironment(env),
+    applyWindowTint:(color)      => applyWindowTintRef.current?.(color),
   }), []);
 
   // ── Three.js setup ─────────────────────────────────────────────────────────
@@ -452,7 +465,6 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ onPaintSetCh
       depthWrite:  false,
       depthTest:   true,
       blending:    THREE.MultiplyBlending,
-      renderOrder: 1,
     });
     const contactShadow = new THREE.Mesh(
       new THREE.PlaneGeometry(1, 1), // scaled per car in loadModel
@@ -591,8 +603,87 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ onPaintSetCh
           emissive:          cloned.emissive.clone(),
           emissiveIntensity: cloned.emissiveIntensity,
           envMapIntensity:   cloned.envMapIntensity,
+          transparent:       cloned.transparent,
+          opacity:           cloned.opacity,
         },
       });
+    };
+
+    const isWindowMesh = (mesh: THREE.Mesh): boolean => {
+      const text = meshSearchText(mesh);
+      return WINDOW_TINT_TARGETS.some((kw) => text.includes(kw));
+    };
+
+    const addToWindowTintSet = (mesh: THREE.Mesh): void => {
+      if (windowTintRef.current.has(mesh.uuid)) return;
+      const raw    = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+      const cloned = (raw as THREE.MeshStandardMaterial).clone();
+      mesh.material = cloned;
+      windowTintRef.current.set(mesh.uuid, {
+        mesh,
+        originalSnapshot: {
+          color:             cloned.color.clone(),
+          metalness:         cloned.metalness,
+          roughness:         cloned.roughness,
+          map:               cloned.map,
+          emissive:          cloned.emissive.clone(),
+          emissiveIntensity: cloned.emissiveIntensity,
+          envMapIntensity:   cloned.envMapIntensity,
+          transparent:       cloned.transparent,
+          opacity:           cloned.opacity,
+        },
+      });
+    };
+
+    const restoreWindowTintMaterials = (): void => {
+      for (const [, entry] of windowTintRef.current) {
+        const mat = entry.mesh.material as THREE.MeshStandardMaterial;
+        const o   = entry.originalSnapshot;
+        mat.color.copy(o.color);
+        mat.metalness         = o.metalness;
+        mat.roughness         = o.roughness;
+        mat.map               = o.map;
+        mat.emissive.copy(o.emissive);
+        mat.emissiveIntensity = o.emissiveIntensity;
+        mat.envMapIntensity   = o.envMapIntensity;
+        mat.transparent       = o.transparent;
+        mat.opacity           = o.opacity;
+        mat.needsUpdate       = true;
+      }
+      windowTintRef.current.clear();
+    };
+
+    const collectWindowTintMeshes = (): THREE.Mesh[] => {
+      const meshes: THREE.Mesh[] = [];
+      if (!currentModelRef.current) return meshes;
+      currentModelRef.current.traverse((child) => {
+        if (child instanceof THREE.Mesh && isWindowMesh(child)) meshes.push(child);
+      });
+      return meshes;
+    };
+
+    const applyWindowTint = (color: string | null): void => {
+      currentWindowTint.current = color;
+      if (color === null) {
+        restoreWindowTintMaterials();
+        return;
+      }
+
+      const meshes = collectWindowTintMeshes();
+      for (const mesh of meshes) addToWindowTintSet(mesh);
+
+      for (const [, entry] of windowTintRef.current) {
+        const mat = entry.mesh.material as THREE.MeshStandardMaterial;
+        mat.color.set(color);
+        mat.metalness = 0.0;
+        mat.roughness = 0.18;
+        mat.transparent = true;
+        mat.opacity = 0.45;
+        mat.envMapIntensity = 1.0;
+        mat.emissive.set(color);
+        mat.emissiveIntensity = 0.08;
+        mat.needsUpdate = true;
+      }
     };
 
     const removeFromPaintSet = (uuid: string): void => {
@@ -607,12 +698,16 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ onPaintSetCh
       mat.emissive.copy(o.emissive);
       mat.emissiveIntensity = o.emissiveIntensity;
       mat.envMapIntensity   = o.envMapIntensity;
+      mat.transparent       = o.transparent;
+      mat.opacity           = o.opacity;
       mat.needsUpdate       = true;
       paintSetRef.current.delete(uuid);
     };
 
     const wipePaintSet = (): void => {
       paintSetRef.current.clear();
+      restoreWindowTintMaterials();
+      windowTintRef.current.clear();
       carbonTexRef.current?.dispose();
       carbonTexRef.current = null;
       lastConfigRef.current = null;
@@ -677,6 +772,7 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ onPaintSetCh
     };
 
     applyWrapRef.current = applyWrapToPaintSet;
+    applyWindowTintRef.current = applyWindowTint;
 
     // ── Auto-detection ────────────────────────────────────────────────────────
 
@@ -895,6 +991,10 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ onPaintSetCh
 
           if (saved?.lastConfig && saved.lastConfig.type !== 'reset') {
             applyWrapToPaintSet(saved.lastConfig);
+          }
+
+          if (currentWindowTint.current !== null) {
+            applyWindowTint(currentWindowTint.current);
           }
 
           if (pickModeActive) setPickModeActive(true);
