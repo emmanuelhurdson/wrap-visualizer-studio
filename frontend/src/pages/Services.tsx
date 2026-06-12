@@ -3,11 +3,13 @@ import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Link } from "react-router-dom";
 import { Palette, Shield, Sparkles, SunMedium, Droplets, Clock, Award, Users } from "lucide-react";
 
 const services = [
   {
     icon: Palette,
+    slug: "vinyl-wraps",
     title: "Vinyl Wraps",
     description: "Transform your vehicle with premium vinyl wraps in endless colors and finishes",
     features: ["Matte, Gloss, Satin finishes", "Color change wraps", "Custom designs", "3-5 year durability"],
@@ -18,6 +20,7 @@ const services = [
   },
   {
     icon: Shield,
+    slug: "paint-protection-film",
     title: "Paint Protection Film",
     description: "Invisible protection that keeps your paint pristine for years to come",
     features: ["Self-healing technology", "UV protection", "Rock chip resistance", "Maintains resale value"],
@@ -27,6 +30,7 @@ const services = [
   },
   {
     icon: Sparkles,
+    slug: "ceramic-coating",
     title: "Ceramic Coating",
     description: "Advanced nano-coating for ultimate shine and protection",
     features: ["Hydrophobic coating", "Enhanced gloss", "UV protection", "Easy maintenance"],
@@ -36,6 +40,7 @@ const services = [
   },
   {
     icon: SunMedium,
+    slug: "window-tinting",
     title: "Window Tinting",
     description: "Premium tints for privacy, comfort, and UV protection",
     features: ["99% UV rejection", "Heat reduction", "Privacy protection", "Lifetime warranty"],
@@ -45,6 +50,7 @@ const services = [
   },
   {
     icon: Droplets,
+    slug: "detailing-services",
     title: "Detailing Services",
     description: "Complete interior and exterior detailing for the perfect finish",
     features: ["Paint correction", "Interior protection", "Maintenance packages", "Show car finish"],
@@ -153,8 +159,8 @@ const Services = () => {
                 
                 <div className="flex items-center justify-between pt-4 border-t border-border">
                   <span className="text-lg font-bold text-primary">{service.price}</span>
-                  <Button variant="outline" size="sm" className="btn-secondary">
-                    Learn More
+                  <Button asChild variant="outline" size="sm" className="btn-secondary">
+                    <Link to={`/services/${service.slug}`}>Learn More</Link>
                   </Button>
                 </div>
               </CardContent>
@@ -223,12 +229,14 @@ const Services = () => {
               Get started with a free consultation and see how we can bring your vision to life.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button className="btn-hero text-lg px-8 py-4">
-                <Users className="mr-2 w-5 h-5" />
-                Schedule Consultation
+              <Button asChild className="btn-hero text-lg px-8 py-4">
+                <Link to="/consultation">
+                  <Users className="mr-2 w-5 h-5" />
+                  Schedule Consultation
+                </Link>
               </Button>
-              <Button className="btn-secondary text-lg px-8 py-4">
-                Get Instant Quote
+              <Button asChild className="btn-secondary text-lg px-8 py-4">
+                <Link to="/request-quote">Get Instant Quote</Link>
               </Button>
             </div>
           </Card>

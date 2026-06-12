@@ -15,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Car, Palette, Download, Share, Quote } from "lucide-react";
 import ThreeScene, { type ThreeSceneHandle, type WrapConfig } from "@/components/ThreeScene";
 import { CAR_MODELS, CAR_MODELS_BY_CATEGORY, type CarModel } from "@/data/cars";
+import { Link } from "react-router-dom";
 
 // ── Category icons ────────────────────────────────────────────────────────────
 const CAT_ICON: Record<string, string> = {
@@ -307,12 +308,14 @@ const Visualizer = () => {
 
                 {/* Action Buttons */}
                 <div className="flex flex-col sm:flex-row gap-4">
-                  <Button className="btn-hero flex-1">
-                    <Quote className="mr-2 w-5 h-5" />
-                    Get Official Quote
+                  <Button className="btn-hero flex-1" asChild>
+                    <Link to="/request-quote">
+                      <Quote className="mr-2 w-5 h-5" />
+                      Get Official Quote
+                    </Link>
                   </Button>
-                  <Button className="btn-secondary flex-1">
-                    Schedule Consultation
+                  <Button className="btn-secondary flex-1" asChild>
+                    <Link to="/consultation">Schedule Consultation</Link>
                   </Button>
                 </div>
               </CardContent>

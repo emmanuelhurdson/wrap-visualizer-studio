@@ -77,8 +77,144 @@ const BODY_EXCLUDE = [
   'disk', 'disc', 'exhaust', 'pipe', 'muffler',
   'badge', 'logo', 'emblem', 'decal', 'plate', 'number',
   'shadow', 'floor', 'ground', 'carpet', 'interior', 'seat', 'dash',
-  'underbody', 'frame', 'chassis',
+  'steer', 'leather', 'upholstery', 'screen', 'monitor', 'gauge',
+  'underbody', 'undercarrier', 'frame', 'chassis',
 ];
+
+const BODY_INCLUDE_STRONG = [
+  'carpaint', 'car_paint', 'bodypaint', 'paint_metal', 'paint1',
+  'body_main', 'body03body', 'carbody', 'kuzov', 'out_car',
+];
+
+const BODY_INCLUDE = [
+  'body', 'paint', 'colour', 'color', 'exterior', 'hood', 'bonnet',
+  'door', 'fender', 'quarter', 'bumper', 'trunk', 'boot', 'roof',
+  'panel', 'side', 'frontcolor',
+];
+
+const BODY_NEGATIVE_WEAK = [
+  'black', 'plastic', 'grille', 'trim', 'sensor', 'handle',
+];
+
+const BODY_TARGET_OVERRIDES: Record<string, string[]> = {
+  '/coupe/audi-tt.glb': ['carpaint'],
+  '/coupe/bmw-i8.glb': ['carpaint', 'kuzov_red_color', 'front_bumper_color', 'mirrors_color'],
+  '/coupe/bmw-m6.glb': ['f06d_body', 'f06d_hood', 'f06d_door', 'f06d_bumper'],
+  '/coupe/lexus-bev-sport-concept-2021.glb': ['carpaint#chassis', 'carpaint_custom'],
+  '/coupe/lexus-lc-500.glb': ['_color_b03', 'frontcolor', 'body_0', 'frbmp'],
+  '/coupe/nissan-gt-r-black-edition-2013.glb': ['carpaint'],
+  '/coupe/porsche-911.glb': ['body_main', 'body_all', 'body_circles'],
+  '/hatchback/bmw-5-series-gran-turismo-2014.glb': ['m_paint_metal_high', 'carpaint'],
+  '/hatchback/mazda-3.glb': ['machine_gray_metallic'],
+  '/hatchback/mercedes-amg-a45.glb': ['sun_yellow', 'coloured_material'],
+  '/hatchback/volkswagen-polo.glb': ['polo17body', 'polo17_body', 'polo17_fender'],
+  '/pickup/ford-raptor.glb': ['paint_1', 'paint_2', 'smallspecmap'],
+  '/sedan/bmw-m3.glb': ['body', 'paint'],
+  '/sedan/mazda-atenza.glb': ['body', 'paint'],
+  '/suv/audi-q5-sportback-2022.glb': ['carpaint', 'body'],
+  '/suv/bmw-x3.glb': ['carpaint', 'body'],
+  '/suv/bmw-x5-e53-restyling.glb': ['carpaint', 'body'],
+  '/suv/bmw-x7.glb': ['carpaint', 'body'],
+  '/suv/lexus-gx-550-overtrail-2023.glb': ['carpaint', 'body'],
+  '/suv/lexus-gx.glb': ['carpaint', 'body'],
+  '/suv/lexus-lx.glb': ['carpaint', 'body'],
+  '/suv/mazda-cx-5.glb': ['carpaint', 'body'],
+  '/suv/mazda-cx-5-2020.glb': ['carpaint', 'body'],
+  '/suv/mercedes-amg-g63.glb': ['carpaint', 'body'],
+  '/suv/mercedes-amg-g63-alt.glb': ['carpaint', 'body'],
+  '/suv/mercedes-amg-gle-63-coupe-2022.glb': ['carpaint', 'body'],
+  '/suv/mercedes-benz-glc-coupe.glb': ['carpaint', 'body'],
+  '/suv/mercedes-benz-gle-2027.glb': ['carpaint', 'body'],
+  '/suv/mercedes-benz-gle-class-w166-coupe.glb': ['carpaint', 'body'],
+  '/suv/nissan-x-trail-white.glb': ['carpaint', 'body'],
+  '/suv/porsche-cayenne.glb': ['carpaint', 'body'],
+  '/suv/range-rover.glb': ['carpaint', 'body'],
+  '/suv/range-rover-2010.glb': ['carpaint', 'body'],
+  '/suv/range-rover-sport.glb': ['carpaint', 'body'],
+  '/suv/range-rover-sport-2018.glb': ['carpaint', 'body'],
+  '/suv/range-rover-supercharged-2010.glb': ['carpaint', 'body'],
+  '/suv/subaru-forester-2020.glb': ['paint', 'body'],
+  '/suv/toyota-harrier.glb': ['body03body'],
+  '/suv/toyota-harrier-2022.glb': ['carp', 'carpaint', 'out_car', 'back_door'],
+  '/suv/toyota-land-cruiser-300-2024.glb': ['carpaint'],
+  '/suv/toyota-land-cruiser-vx-r-2018.glb': ['carpaint'],
+  '/suv/toyota-prado-2013.glb': ['landcruiserbody'],
+  '/suv/toyota-prado-2025.glb': ['body_12', 'bonnet', 'side', 'front_bumper', 'rear_bumper', 'trunk'],
+  '/suv/toyota-rav4-2021.glb': ['red1', 'whiteroof'],
+  '/suv/toyota-rav4-2023.glb': ['color_2'],
+  '/wagon/toyota-corolla-fielder-z-aero-tourer-2005.glb': ['paint1', 'dodgerblue'],
+  '/wagon/toyota-probox.glb': ['body1', 'color_b02'],
+};
+
+function meshSearchText(mesh: THREE.Mesh): string {
+  const names: string[] = [mesh.name];
+  const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+  for (const mat of mats) names.push(mat.name);
+
+  let parent = mesh.parent;
+  while (parent) {
+    names.push(parent.name);
+    parent = parent.parent;
+  }
+
+  return names.filter(Boolean).join(' ').toLowerCase();
+}
+
+function scoreBodyMesh(mesh: THREE.Mesh): { score: number; reasons: string[] } {
+  const text = meshSearchText(mesh);
+  let score = 0;
+  const reasons: string[] = [];
+
+  for (const kw of BODY_INCLUDE_STRONG) {
+    if (text.includes(kw)) {
+      score += 100;
+      reasons.push(`+${kw}`);
+    }
+  }
+
+  for (const kw of BODY_INCLUDE) {
+    if (text.includes(kw)) {
+      score += 35;
+      reasons.push(`+${kw}`);
+    }
+  }
+
+  for (const kw of BODY_EXCLUDE) {
+    if (text.includes(kw)) {
+      const hasStrongPaint = BODY_INCLUDE_STRONG.some(pos => text.includes(pos));
+      const penalty = hasStrongPaint && (kw === 'chassis' || kw === 'color') ? 20 : 120;
+      score -= penalty;
+      reasons.push(`-${kw}`);
+    }
+  }
+
+  for (const kw of BODY_NEGATIVE_WEAK) {
+    if (text.includes(kw)) {
+      score -= 20;
+      reasons.push(`-${kw}`);
+    }
+  }
+
+  return { score, reasons };
+}
+
+function matchesBodyOverride(mesh: THREE.Mesh, path: string): boolean {
+  const keys = BODY_TARGET_OVERRIDES[path];
+  if (!keys) return false;
+
+  const text = meshSearchText(mesh);
+  const hasTarget = keys.some(key => text.includes(key));
+  if (!hasTarget) return false;
+
+  const hasHardInterior = ['interior', 'seat', 'dash', 'steer', 'leather', 'upholstery', 'carpet'].some(
+    kw => text.includes(kw),
+  );
+  const hasHardAccessory = ['wheel', 'tire', 'tyre', 'brake', 'caliper', 'glass', 'window', 'light', 'plate'].some(
+    kw => text.includes(kw),
+  );
+
+  return !hasHardInterior && !hasHardAccessory;
+}
 
 function disposeModel(root: THREE.Group): void {
   root.traverse((obj) => {
@@ -545,20 +681,86 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ onPaintSetCh
     // ── Auto-detection ────────────────────────────────────────────────────────
 
     const autoDetectPaintSet = (model: THREE.Group): void => {
+      const meshScores: { mesh: THREE.Mesh; score: number; reasons: string[]; volume: number }[] = [];
+      const overrideMeshes: THREE.Mesh[] = [];
       const groups = new Map<string, { meshes: THREE.Mesh[]; volume: number }>();
 
       model.traverse((child) => {
         if (!(child instanceof THREE.Mesh)) return;
+        if (matchesBodyOverride(child, currentCarPathRef.current)) overrideMeshes.push(child);
+
         const raw     = Array.isArray(child.material) ? child.material[0] : child.material;
         const matName = raw.name || `__unnamed_${child.uuid.slice(0, 8)}`;
         const g       = groups.get(matName) ?? { meshes: [], volume: 0 };
         const s       = new THREE.Box3().setFromObject(child).getSize(new THREE.Vector3());
-        g.volume += s.x * s.y * s.z;
+        const volume  = s.x * s.y * s.z;
+        g.volume += volume;
         g.meshes.push(child);
         groups.set(matName, g);
+
+        const { score, reasons } = scoreBodyMesh(child);
+        meshScores.push({ mesh: child, score, reasons, volume });
       });
 
+      if (overrideMeshes.length > 0) {
+        for (const mesh of overrideMeshes) addToPaintSet(mesh);
+        console.log(
+          `[ThreeScene] Auto-selected ${overrideMeshes.length} override body mesh(es) for ` +
+          currentCarPathRef.current,
+        );
+        return;
+      }
+
       const sorted = Array.from(groups.entries()).sort((a, b) => b[1].volume - a[1].volume);
+      const scored = meshScores.sort((a, b) => b.score - a.score || b.volume - a.volume);
+
+      console.log('── Body mesh scoring ──────────────────────────');
+      for (const item of scored.slice(0, 18)) {
+        const raw = Array.isArray(item.mesh.material) ? item.mesh.material[0] : item.mesh.material;
+        console.log(
+          `  score:${item.score.toString().padStart(4)} vol:${item.volume.toFixed(4)} ` +
+          `mesh:"${item.mesh.name}" mat:"${raw.name}" ${item.reasons.join(' ')}`,
+        );
+      }
+
+      const selectedByScore = scored.filter(item => item.score >= 45);
+      if (selectedByScore.length > 0) {
+        for (const { mesh } of selectedByScore) addToPaintSet(mesh);
+        console.log(
+          `── Auto-selected ${selectedByScore.length} scored exterior mesh(es): ` +
+          selectedByScore.slice(0, 12).map(({ mesh }) => `"${mesh.name}"`).join(', ') +
+          (selectedByScore.length > 12 ? ', ...' : ''),
+        );
+        console.log('──────────────────────────────────────────────');
+        return;
+      }
+
+      const fallbackBodyGroups = Array.from(groups.entries()).map(([matName, { meshes, volume }]) => {
+        const text = [matName, ...meshes.map(meshSearchText)].join(' ').toLowerCase();
+        const bodyScore = BODY_INCLUDE_STRONG.reduce((score, kw) => score + (text.includes(kw) ? 120 : 0), 0)
+          + BODY_INCLUDE.reduce((score, kw) => score + (text.includes(kw) ? 40 : 0), 0)
+          - BODY_NEGATIVE_WEAK.reduce((score, kw) => score + (text.includes(kw) ? 15 : 0), 0);
+        const excluded = BODY_EXCLUDE.some(kw => text.includes(kw));
+        return { matName, meshes, volume, bodyScore, excluded };
+      }).filter((entry) => !entry.excluded && entry.bodyScore > 0);
+
+      if (fallbackBodyGroups.length > 0) {
+        const topVolume = Math.max(...fallbackBodyGroups.map(entry => entry.volume));
+        const selectedGroups = fallbackBodyGroups
+          .filter(entry => entry.volume >= topVolume * 0.65)
+          .slice(0, 3);
+
+        for (const group of selectedGroups) {
+          for (const mesh of group.meshes) addToPaintSet(mesh);
+        }
+
+        console.log(
+          `── Auto-selected ${selectedGroups.length} body group(s) by fallback rules: ` +
+          selectedGroups.map(group => `"${group.matName}"`).join(', '),
+        );
+        console.log('──────────────────────────────────────────────────────');
+        return;
+      }
 
       console.log('── Material group analysis ──────────────────────────');
       for (const [name, { meshes, volume }] of sorted) {
@@ -571,8 +773,9 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ onPaintSetCh
       );
 
       if (candidates.length === 0) {
-        console.warn('[ThreeScene] No candidates passed filter — selecting all meshes');
-        model.traverse((child) => { if (child instanceof THREE.Mesh) addToPaintSet(child); });
+        console.warn('[ThreeScene] No named body candidates; selecting the highest-scored mesh only.');
+        const bestMesh = scored[0]?.mesh;
+        if (bestMesh) addToPaintSet(bestMesh);
         console.log('─────────────────────────────────────────────────────');
         return;
       }
