@@ -6,16 +6,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Car, Palette, Download, Share, Quote } from "lucide-react";
+import { Car, Palette } from "lucide-react";
 import ThreeScene, { type ThreeSceneHandle, type WrapConfig } from "@/components/ThreeScene";
 import { CAR_MODELS, CAR_MODELS_BY_CATEGORY, type CarModel } from "@/data/cars";
-import { Link } from "react-router-dom";
 
 // ── Category icons ────────────────────────────────────────────────────────────
 const CAT_ICON: Record<string, string> = {
@@ -28,11 +27,6 @@ const CAT_ICON: Record<string, string> = {
   Wagon:      "🚗",
 };
 
-// ── One quick-pick car from each category ─────────────────────────────────────
-const QUICK_PICKS: CarModel[] = Array.from(CAR_MODELS_BY_CATEGORY.values()).map(
-  (cars) => cars[0],
-);
-
 // ── Wrap finishes with Three.js WrapConfig mapping ────────────────────────────
 type WrapFinish = {
   name:       string;
@@ -42,17 +36,21 @@ type WrapFinish = {
   wrapConfig: WrapConfig;
 };
 
+const WRAP_CATEGORIES = ["Gloss", "Satin", "Matte"] as const;
+
+type WrapCategory = (typeof WRAP_CATEGORIES)[number];
+
 const WRAP_FINISHES: WrapFinish[] = [
-  { name: "Matte Black",     color: "#1a1a1a", type: "Matte",    price: 2800, wrapConfig: { type: "solid",    color: "#1a1a1a" } },
-  { name: "Gloss White",     color: "#f0f0f0", type: "Gloss",    price: 2500, wrapConfig: { type: "metallic", color: "#f0f0f0" } },
-  { name: "Chrome Silver",   color: "#c0c0c0", type: "Chrome",   price: 4200, wrapConfig: { type: "metallic", color: "#c0c0c0" } },
-  { name: "Orange Burst",    color: "#ff6b35", type: "Gloss",    price: 2700, wrapConfig: { type: "solid",    color: "#ff6b35" } },
-  { name: "Midnight Blue",   color: "#191970", type: "Matte",    price: 2900, wrapConfig: { type: "solid",    color: "#191970" } },
-  { name: "Racing Red",      color: "#dc143c", type: "Gloss",    price: 2600, wrapConfig: { type: "metallic", color: "#dc143c" } },
-  { name: "Forest Green",    color: "#355e3b", type: "Matte",    price: 2900, wrapConfig: { type: "solid",    color: "#355e3b" } },
-  { name: "Gold Chrome",     color: "#ffd700", type: "Chrome",   price: 4500, wrapConfig: { type: "metallic", color: "#ffd700" } },
-  { name: "Purple Metallic", color: "#663399", type: "Metallic", price: 3200, wrapConfig: { type: "metallic", color: "#663399" } },
-  { name: "Carbon Fiber",    color: "#2c2c2c", type: "Textured", price: 3800, wrapConfig: { type: "carbon" } },
+  { name: "Gloss White",     color: "#f0f0f0", type: "Gloss", price: 2500, wrapConfig: { type: "metallic", color: "#f0f0f0" } },
+  { name: "Gloss Red",       color: "#dc143c", type: "Gloss", price: 2600, wrapConfig: { type: "metallic", color: "#dc143c" } },
+  { name: "Gloss Silver",    color: "#c0c0c0", type: "Gloss", price: 4200, wrapConfig: { type: "metallic", color: "#c0c0c0" } },
+  { name: "Satin Steel",     color: "#8b8d90", type: "Satin", price: 3000, wrapConfig: { type: "solid", color: "#8b8d90" } },
+  { name: "Satin Midnight",  color: "#283149", type: "Satin", price: 3200, wrapConfig: { type: "solid", color: "#283149" } },
+  { name: "Satin Pearl",     color: "#e8eaf6", type: "Satin", price: 3000, wrapConfig: { type: "solid", color: "#e8eaf6" } },
+  { name: "Matte Black",     color: "#1a1a1a", type: "Matte", price: 2800, wrapConfig: { type: "solid", color: "#1a1a1a" } },
+  { name: "Matte Blue",      color: "#191970", type: "Matte", price: 2900, wrapConfig: { type: "solid", color: "#191970" } },
+  { name: "Matte Green",     color: "#355e3b", type: "Matte", price: 2900, wrapConfig: { type: "solid", color: "#355e3b" } },
+  { name: "Carbon Fiber",    color: "#2c2c2c", type: "Matte", price: 3800, wrapConfig: { type: "carbon" } },
 ];
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -64,6 +62,24 @@ const Visualizer = () => {
   const [loading,      setLoading]      = useState(true);
   const [selectedCar,  setSelectedCar]  = useState<CarModel>(CAR_MODELS[0]);
   const [selectedWrap, setSelectedWrap] = useState<WrapFinish>(WRAP_FINISHES[0]);
+  const [selectedWrapCategory, setSelectedWrapCategory] = useState<WrapCategory>("Gloss");
+  const [customColor, setCustomColor]   = useState('#ff3b30');
+
+  const customColorWrap: WrapFinish = {
+    name: 'Custom Color',
+    color: customColor,
+    type: 'Matte',
+    price: 0,
+    wrapConfig: { type: 'solid', color: customColor },
+  };
+
+  const handleSelectCustomColor = (): void => {
+    const wrap = { ...customColorWrap, wrapConfig: { type: 'solid', color: customColor } };
+    setSelectedWrap(wrap);
+    if (!loading) sceneRef.current?.applyWrap(wrap.wrapConfig);
+  };
+
+  const wrapOptions = WRAP_FINISHES.filter((wrap) => wrap.type === selectedWrapCategory);
 
   // Stable ref so onPaintSetChange closure always reads the latest wrap
   const selectedWrapRef = useRef(selectedWrap);
@@ -113,27 +129,70 @@ const Visualizer = () => {
       </section>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="grid lg:grid-cols-3 gap-8">
+        <div className="space-y-8">
+          <Card className="card-glass">
+            <CardHeader>
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <CardTitle>Live Preview</CardTitle>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Button variant="outline" size="sm">
+                    <Download className="w-4 h-4 mr-2" />
+                    Save
+                  </Button>
+                  <Button variant="outline" size="sm">
+                    <Share className="w-4 h-4 mr-2" />
+                    Share
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="relative rounded-xl overflow-hidden bg-[#1a1a1a]" style={{ height: "520px" }}>
+                <ThreeScene ref={sceneRef} onPaintSetChange={handlePaintSetChange} />
 
-          {/* Controls Panel */}
-          <div className="lg:col-span-1 space-y-6">
-            <Tabs defaultValue="model" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="model">Model</TabsTrigger>
-                <TabsTrigger value="wrap">Wrap</TabsTrigger>
-              </TabsList>
+                {loading && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm pointer-events-none">
+                    <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin mb-3" />
+                    <p className="text-white/70 text-sm">Loading model…</p>
+                  </div>
+                )}
+              </div>
 
-              {/* ── Model tab ──────────────────────────────────────────────── */}
-              <TabsContent value="model" className="space-y-4">
-                <Card className="card-glass">
-                  <CardHeader>
-                    <CardTitle className="flex items-center">
-                      <Car className="mr-2 w-5 h-5 text-primary" />
-                      Select Vehicle
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {/* Full list dropdown */}
+              <div className="rounded-2xl border border-border bg-muted/10 p-5">
+              <h3 className="font-bold text-lg mb-4">Configuration</h3>
+              <div className="space-y-3 text-sm text-muted-foreground">
+                <div className="flex justify-between">
+                  <span>Vehicle</span>
+                  <span className="font-medium text-foreground">{selectedCar.name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Category</span>
+                  <span className="font-medium text-foreground">{selectedCar.category}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Wrap</span>
+                  <span className="font-medium text-foreground">{selectedWrap.name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Finish</span>
+                  <span className="font-medium text-foreground">{selectedWrap.type}</span>
+                </div>
+              </div>
+            </div>
+            </CardContent>
+          </Card>
+
+          <div className="grid lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-1 space-y-6">
+              <Card className="card-glass">
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <Car className="mr-2 w-5 h-5 text-primary" />
+                    Switch Model
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-6">
                     <Select
                       value={selectedCar.id}
                       onValueChange={(id) => {
@@ -145,181 +204,130 @@ const Visualizer = () => {
                         <SelectValue placeholder="Choose your vehicle" />
                       </SelectTrigger>
                       <SelectContent>
-                        {CAR_MODELS.map((car) => (
-                          <SelectItem key={car.id} value={car.id}>
-                            {CAT_ICON[car.category] ?? "🚗"} {car.name}
-                          </SelectItem>
+                        {Array.from(CAR_MODELS_BY_CATEGORY.entries()).map(([category, cars]) => (
+                          <SelectGroup key={category}>
+                            <SelectLabel>{category}</SelectLabel>
+                            {cars.map((car) => (
+                              <SelectItem key={car.id} value={car.id}>
+                                {CAT_ICON[car.category] ?? "🚗"} {car.name}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
                         ))}
                       </SelectContent>
                     </Select>
 
-                    {/* Quick-pick grid — one per category */}
-                    <div className="mt-4 grid grid-cols-2 gap-2">
-                      {QUICK_PICKS.map((car) => (
+                    <div className="rounded-2xl border border-border p-4 bg-muted/10">
+                      {Array.from(CAR_MODELS_BY_CATEGORY.entries()).map(([category, cars]) => (
+                        <div key={category} className="mb-4 last:mb-0">
+                          <div className="text-sm font-semibold text-foreground mb-3">{category}</div>
+                          <div className="grid grid-cols-1 gap-2">
+                            {cars.map((car) => (
+                              <button
+                                key={car.id}
+                                onClick={() => handleSelectCar(car)}
+                                className={`rounded-lg border px-3 py-2 text-left text-sm transition ${
+                                  selectedCar.id === car.id
+                                    ? 'border-primary bg-primary/10'
+                                    : 'border-border bg-card hover:border-primary/50'
+                                }`}
+                              >
+                                {car.name}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="lg:col-span-1 space-y-6">
+              <Card className="card-glass">
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <Palette className="mr-2 w-5 h-5 text-primary" />
+                    Wrap
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-6">
+                    <div className="flex gap-2 flex-wrap">
+                      {WRAP_CATEGORIES.map((category) => (
                         <button
-                          key={car.id}
-                          onClick={() => handleSelectCar(car)}
-                          className={`p-3 rounded-lg border-2 transition-all text-left ${
-                            selectedCar.id === car.id
-                              ? "border-primary bg-primary/10"
-                              : "border-border bg-card hover:border-primary/50"
+                          key={category}
+                          onClick={() => setSelectedWrapCategory(category)}
+                          className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                            selectedWrapCategory === category
+                              ? 'bg-primary text-primary-foreground'
+                              : 'border border-border bg-card text-muted-foreground hover:border-primary'
                           }`}
                         >
-                          <div className="text-2xl mb-1">
-                            {CAT_ICON[car.category] ?? "🚗"}
-                          </div>
-                          <div className="text-sm font-medium leading-tight">
-                            {car.name}
-                          </div>
-                          <Badge variant="secondary" className="text-xs mt-1">
-                            {car.category}
-                          </Badge>
+                          {category}
                         </button>
                       ))}
                     </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
 
-              {/* ── Wrap tab ───────────────────────────────────────────────── */}
-              <TabsContent value="wrap" className="space-y-4">
-                <Card className="card-glass">
-                  <CardHeader>
-                    <CardTitle className="flex items-center">
-                      <Palette className="mr-2 w-5 h-5 text-primary" />
-                      Choose Wrap
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-1 gap-3 max-h-96 overflow-y-auto">
-                      {WRAP_FINISHES.map((wrap) => (
+                    <div className="grid grid-cols-1 gap-3">
+                      {wrapOptions.map((wrap) => (
                         <button
                           key={wrap.name}
                           onClick={() => handleSelectWrap(wrap)}
-                          className={`p-4 rounded-lg border-2 transition-all flex items-center space-x-3 ${
+                          className={`flex items-center gap-3 rounded-xl border p-4 transition ${
                             selectedWrap.name === wrap.name
-                              ? "border-primary bg-primary/10"
-                              : "border-border bg-card hover:border-primary/50"
+                              ? 'border-primary bg-primary/10'
+                              : 'border-border bg-card hover:border-primary/50'
                           }`}
                         >
-                          <div
-                            className="w-12 h-12 rounded-lg flex-shrink-0"
-                            style={{ backgroundColor: wrap.color }}
-                          />
-                          <div className="flex-1 text-left">
+                          <div className="h-12 w-12 rounded-lg border" style={{ backgroundColor: wrap.color }} />
+                          <div className="text-left">
                             <div className="font-medium">{wrap.name}</div>
-                            <div className="text-sm text-muted-foreground">
-                              {wrap.type}
-                            </div>
-                            <div className="text-sm font-bold text-primary">
-                              ${wrap.price.toLocaleString()}
-                            </div>
+                            <div className="text-sm text-muted-foreground">{wrap.type}</div>
                           </div>
                         </button>
                       ))}
                     </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-            </Tabs>
-          </div>
-
-          {/* Main Preview */}
-          <div className="lg:col-span-2">
-            <Card className="card-glass h-full">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>Live Preview</CardTitle>
-                  <div className="flex items-center space-x-2">
-                    <Button variant="outline" size="sm">
-                      <Download className="w-4 h-4 mr-2" />
-                      Save
-                    </Button>
-                    <Button variant="outline" size="sm">
-                      <Share className="w-4 h-4 mr-2" />
-                      Share
-                    </Button>
                   </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-6">
+                </CardContent>
+              </Card>
+            </div>
 
-                {/* 3D Preview */}
-                <div className="relative rounded-xl overflow-hidden bg-[#1a1a1a]" style={{ height: "460px" }}>
-                  <ThreeScene ref={sceneRef} onPaintSetChange={handlePaintSetChange} />
-
-                  {/* Loading overlay */}
-                  {loading && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm pointer-events-none">
-                      <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin mb-3" />
-                      <p className="text-white/70 text-sm">Loading model…</p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Configuration Summary */}
-                <div className="grid md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <h3 className="font-bold text-lg">Configuration</h3>
-                    <div className="space-y-1 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Vehicle:</span>
-                        <span className="font-medium">{selectedCar.name}</span>
+            <div className="lg:col-span-1 space-y-6">
+              <Card className="card-glass">
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <Palette className="mr-2 w-5 h-5 text-primary" />
+                    Tint
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-6">
+                    <div className="rounded-2xl border border-border bg-muted/10 p-4">
+                      <div className="text-sm font-semibold text-muted-foreground mb-3">
+                        Full color wheel
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Category:</span>
-                        <span className="font-medium">{selectedCar.category}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Wrap:</span>
-                        <span className="font-medium">{selectedWrap.name}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Finish:</span>
-                        <span className="font-medium">{selectedWrap.type}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <h3 className="font-bold text-lg">Pricing</h3>
-                    <div className="space-y-1 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Base Wrap:</span>
-                        <span className="font-medium">
-                          ${selectedWrap.price.toLocaleString()}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Installation:</span>
-                        <span className="font-medium">$500</span>
-                      </div>
-                      <div className="border-t border-border pt-2 mt-2">
-                        <div className="flex justify-between font-bold text-lg">
-                          <span>Total:</span>
-                          <span className="text-primary">
-                            ${(selectedWrap.price + 500).toLocaleString()}
-                          </span>
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                        <input
+                          type="color"
+                          value={customColor}
+                          onChange={(e) => setCustomColor(e.target.value)}
+                          className="h-12 w-12 rounded-lg border border-border p-0"
+                        />
+                        <div className="flex-1 text-sm text-muted-foreground">
+                          Choose a hue to tint the wrap without changing the section layout.
                         </div>
                       </div>
                     </div>
-                  </div>
-                </div>
 
-                {/* Action Buttons */}
-                <div className="flex flex-col sm:flex-row gap-4">
-                  <Button className="btn-hero flex-1" asChild>
-                    <Link to="/request-quote">
-                      <Quote className="mr-2 w-5 h-5" />
-                      Get Official Quote
-                    </Link>
-                  </Button>
-                  <Button className="btn-secondary flex-1" asChild>
-                    <Link to="/consultation">Schedule Consultation</Link>
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+                    <Button className="w-full btn-secondary" onClick={handleSelectCustomColor}>
+                      Apply Tint
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </div>
         </div>
       </div>
