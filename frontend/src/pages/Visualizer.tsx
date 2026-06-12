@@ -76,6 +76,7 @@ const Visualizer = () => {
   const [selectedWrap, setSelectedWrap] = useState<WrapFinish>(WRAP_FINISHES[0]);
   const [selectedWrapCategory, setSelectedWrapCategory] = useState<WrapCategory>("Gloss");
   const [selectedWrapStyle, setSelectedWrapStyle] = useState<WrapStyle>("All");
+  const [modelSearch, setModelSearch] = useState('');
   const [selectedTintColor, setSelectedTintColor] = useState('#232b34');
   const [activeTintColor, setActiveTintColor] = useState<string | null>(null);
 
@@ -121,6 +122,11 @@ const Visualizer = () => {
     setSelectedCar(car);
     sceneRef.current?.loadCar(car.path);
   };
+
+  const filteredModels = CAR_MODELS.filter((car) =>
+    car.name.toLowerCase().includes(modelSearch.toLowerCase()) ||
+    car.category.toLowerCase().includes(modelSearch.toLowerCase()),
+  );
 
   const handleSelectWrap = (wrap: WrapFinish) => {
     setSelectedWrap(wrap);
@@ -192,51 +198,45 @@ const Visualizer = () => {
                   </AccordionTrigger>
                   <AccordionContent className="px-5 pt-0">
                     <div className="space-y-6 pb-4">
-                      <Select
-                        value={selectedCar.id}
-                        onValueChange={(id) => {
-                          const car = CAR_MODELS.find((m) => m.id === id);
-                          if (car) handleSelectCar(car);
-                        }}
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Choose your vehicle" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Array.from(CAR_MODELS_BY_CATEGORY.entries()).map(([category, cars]) => (
-                            <SelectGroup key={category}>
-                              <SelectLabel>{category}</SelectLabel>
-                              {cars.map((car) => (
-                                <SelectItem key={car.id} value={car.id}>
-                                  {CAT_ICON[car.category] ?? "🚗"} {car.name}
-                                </SelectItem>
-                              ))}
-                            </SelectGroup>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      {/* Select dropdown removed — search bar below provides lookup */}
 
                       <div className="rounded-2xl border border-border p-4 bg-muted/10">
-                        {Array.from(CAR_MODELS_BY_CATEGORY.entries()).map(([category, cars]) => (
-                          <div key={category} className="mb-4 last:mb-0">
-                            <div className="text-sm font-semibold text-foreground mb-3">{category}</div>
-                            <div className="grid grid-cols-1 gap-2">
-                              {cars.map((car) => (
-                                <button
-                                  key={car.id}
-                                  onClick={() => handleSelectCar(car)}
-                                  className={`rounded-lg border px-3 py-2 text-left text-sm transition ${
-                                    selectedCar.id === car.id
-                                      ? 'border-primary bg-primary/10'
-                                      : 'border-border bg-card hover:border-primary/50'
-                                  }`}
-                                >
-                                  {car.name}
-                                </button>
-                              ))}
-                            </div>
+                        <div className="space-y-3">
+                          <div className="text-sm font-semibold text-foreground">Search vehicle</div>
+                          <div className="relative">
+                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                            <input
+                              type="text"
+                              aria-label="Search cars"
+                              placeholder="Search by model or category"
+                              value={modelSearch}
+                              onChange={(e) => setModelSearch(e.target.value)}
+                              className="w-full rounded-full border border-border bg-background py-3 pl-10 pr-4 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10"
+                            />
                           </div>
-                        ))}
+                        </div>
+
+                        <div className="mt-4 grid gap-2">
+                          {filteredModels.length > 0 ? (
+                            filteredModels.map((car) => (
+                              <button
+                                key={car.id}
+                                onClick={() => handleSelectCar(car)}
+                                className={`rounded-lg border px-3 py-2 text-left text-sm transition ${
+                                  selectedCar.id === car.id
+                                    ? 'border-primary bg-primary/10'
+                                    : 'border-border bg-card hover:border-primary/50'
+                                }`}
+                              >
+                                {car.name}
+                              </button>
+                            ))
+                          ) : (
+                            <div className="rounded-2xl border border-dashed border-border bg-card p-4 text-sm text-muted-foreground text-center">
+                              No matches found. Try a different model name or category.
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </AccordionContent>

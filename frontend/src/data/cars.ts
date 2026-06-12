@@ -11,7 +11,7 @@ export const DEFAULT_CAR_ID = 'porsche-911';
 // Category string becomes an <optgroup> label in the selector.
 export const CAR_MODELS: CarModel[] = [
   // Coupe
-  { id: 'audi-tt', name: 'Audi TT', category: 'Coupe', path: '/coupe/audi-tt.glb' },
+  { id: 'audi-tt', name: '', category: 'Coupe', path: '/coupe/audi-tt.glb' },
   { id: 'bmw-i8', name: 'BMW i8', category: 'Coupe', path: '/coupe/bmw-i8.glb' },
   { id: 'bmw-m6', name: 'BMW M6', category: 'Coupe', path: '/coupe/bmw-m6.glb' },
   { id: 'lexus-bev-sport-concept-2021', name: '2021 Lexus BEV Sport Concept', category: 'Coupe', path: '/coupe/lexus-bev-sport-concept-2021.glb' },
