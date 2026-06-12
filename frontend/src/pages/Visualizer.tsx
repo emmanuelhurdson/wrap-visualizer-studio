@@ -20,10 +20,11 @@ import { CAR_MODELS, CAR_MODELS_BY_CATEGORY, type CarModel } from "@/data/cars";
 const CAT_ICON: Record<string, string> = {
   Coupe:      "🏎️",
   Hatchback:  "🚗",
-  "Mini SUV": "🚙",
   Pickup:     "🛻",
   Sedan:      "🚘",
   SUV:        "🚐",
+  Truck:      "🚚",
+  Wagon:      "🚗",
 };
 
 // ── One quick-pick car from each category ─────────────────────────────────────

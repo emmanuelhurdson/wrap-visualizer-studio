@@ -179,7 +179,7 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ onPaintSetCh
   const paintSetRef        = useRef<Map<string, PaintEntry>>(new Map());
   const carbonTexRef       = useRef<THREE.CanvasTexture | null>(null);
   const lastConfigRef      = useRef<WrapConfig | null>(null);
-  const currentCarPathRef  = useRef('/coupe/911.glb');
+  const currentCarPathRef  = useRef('/coupe/porsche-911.glb');
   const carSavedStatesRef  = useRef<Map<string, CarSavedState>>(new Map());
   const currentModelRef    = useRef<THREE.Group | null>(null);
 
@@ -793,7 +793,7 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ onPaintSetCh
     animate();
 
     setEnvModeActive('garage');
-    loadModel('/coupe/911.glb');
+    loadModel('/coupe/porsche-911.glb');
 
     // ── Cleanup ───────────────────────────────────────────────────────────────
     return () => {
