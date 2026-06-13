@@ -433,6 +433,27 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ onPaintSetCh
     };
     envActionsRef.current = { setEnvironment: setEnvModeActive };
 
+    // Helper to apply a preset config to a specific mesh (without affecting others)
+    const applyPresetToMesh = (mesh: THREE.Mesh, config: WrapConfig) => {
+      const mat = mesh.material as THREE.MeshStandardMaterial;
+      mat.map = null;
+      switch (config.type) {
+        case 'solid':
+          mat.color.set(config.color); mat.metalness = 0.0; mat.roughness = 0.85; mat.envMapIntensity = 0.3;
+          break;
+        case 'metallic':
+          mat.color.set(config.color); mat.metalness = 0.92; mat.roughness = 0.12; mat.envMapIntensity = 2.0;
+          break;
+        case 'carbon':
+          mat.color.set('#111111'); mat.metalness = 0.4; mat.roughness = 0.5; mat.envMapIntensity = 0.8;
+          if (!carbonTexRef.current) carbonTexRef.current = makeCarbonFiberTexture();
+          mat.map = carbonTexRef.current;
+          break;
+        default: break;
+      }
+      mat.needsUpdate = true;
+    };
+
     const addToPaintSet = (mesh: THREE.Mesh) => {
       if (paintSetRef.current.has(mesh.uuid)) return;
       const rawMat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
@@ -451,6 +472,10 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ onPaintSetCh
         },
         customTexture: null,
       });
+      // Apply current preset wrap if exists
+      if (lastConfigRef.current && lastConfigRef.current.type !== 'reset') {
+        applyPresetToMesh(mesh, lastConfigRef.current);
+      }
     };
 
     const removeFromPaintSet = (uuid: string) => {
@@ -617,50 +642,34 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ onPaintSetCh
     loadModelRef.current = loadModel;
 
     const onClick = (e: MouseEvent) => {
-  if (!pickModeActive || !currentModelRef.current) return;
-  const rect = canvas.getBoundingClientRect();
-  raycaster.setFromCamera(
-    new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, ((e.clientY - rect.top) / rect.height) * -2 + 1),
-    camera,
-  );
-  const meshes: THREE.Mesh[] = [];
-  currentModelRef.current.traverse(c => { if (c instanceof THREE.Mesh) meshes.push(c); });
-  const hits = raycaster.intersectObjects(meshes);
-  if (hits.length === 0) return;
-  const hit = hits[0].object as THREE.Mesh;
-  if (paintSetRef.current.has(hit.uuid)) {
-    removeFromPaintSet(hit.uuid);
-  } else {
-    addToPaintSet(hit);
-    const mat = hit.material as THREE.MeshStandardMaterial;
-    mat.emissive.set(0x1a44cc);
-    mat.emissiveIntensity = 0.4;
-    // If there is an active preset wrap (e.g., orange), apply it to this new part
-    if (lastConfigRef.current && lastConfigRef.current.type !== 'reset') {
-      // Apply the preset to this specific mesh only (to avoid reapplying to all)
-      const config = lastConfigRef.current;
-      mat.map = null;
-      switch (config.type) {
-        case 'solid':
-          mat.color.set(config.color); mat.metalness = 0.0; mat.roughness = 0.85; mat.envMapIntensity = 0.3;
-          break;
-        case 'metallic':
-          mat.color.set(config.color); mat.metalness = 0.92; mat.roughness = 0.12; mat.envMapIntensity = 2.0;
-          break;
-        case 'carbon':
-          mat.color.set('#111111'); mat.metalness = 0.4; mat.roughness = 0.5; mat.envMapIntensity = 0.8;
-          if (!carbonTexRef.current) carbonTexRef.current = makeCarbonFiberTexture();
-          mat.map = carbonTexRef.current;
-          break;
+      if (!pickModeActive || !currentModelRef.current) return;
+      const rect = canvas.getBoundingClientRect();
+      raycaster.setFromCamera(
+        new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, ((e.clientY - rect.top) / rect.height) * -2 + 1),
+        camera,
+      );
+      const meshes: THREE.Mesh[] = [];
+      currentModelRef.current.traverse(c => { if (c instanceof THREE.Mesh) meshes.push(c); });
+      const hits = raycaster.intersectObjects(meshes);
+      if (hits.length === 0) return;
+      const hit = hits[0].object as THREE.Mesh;
+
+      if (paintSetRef.current.has(hit.uuid)) {
+        removeFromPaintSet(hit.uuid);
+        console.log(`Removed part: ${hit.name}`);
+      } else {
+        addToPaintSet(hit);
+        const mat = hit.material as THREE.MeshStandardMaterial;
+        mat.emissive.set(0x1a44cc);
+        mat.emissiveIntensity = 0.4;
+        mat.needsUpdate = true;
+        console.log(`Added part: ${hit.name}, preset applied via addToPaintSet`);
       }
-      mat.needsUpdate = true;
-    }
-  }
-  const newSize = paintSetRef.current.size;
-  onPaintSetChangeRef.current?.(newSize);
-  setPaintSetSize(newSize);
-  saveCarState();
-};
+      const newSize = paintSetRef.current.size;
+      onPaintSetChangeRef.current?.(newSize);
+      setPaintSetSize(newSize);
+      saveCarState();
+    };
     canvas.addEventListener('click', onClick);
 
     const observer = new ResizeObserver(([entry]) => {

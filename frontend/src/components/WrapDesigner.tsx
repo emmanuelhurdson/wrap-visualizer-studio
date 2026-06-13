@@ -19,6 +19,7 @@ export const WrapDesigner: React.FC<WrapDesignerProps> = ({
   const [brushColor, setBrushColor] = useState("#ff0000");
   const [brushSize, setBrushSize] = useState(10);
   const lastPosRef = useRef<{ x: number; y: number } | null>(null);
+  const currentTextureRef = useRef<CanvasTexture | null>(null);
 
   const drawGrid = (ctx: CanvasRenderingContext2D) => {
     ctx.save();
@@ -48,21 +49,30 @@ export const WrapDesigner: React.FC<WrapDesignerProps> = ({
     if (!ctx) return;
     canvas.width = width;
     canvas.height = height;
+
     if (existingTexture && existingTexture.image) {
-      // Copy existing texture to canvas
       ctx.drawImage(existingTexture.image, 0, 0, width, height);
     } else {
-      // Start with white background and grid
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, width, height);
       drawGrid(ctx);
     }
-    const texture = new CanvasTexture(canvas);
-    onTextureUpdate(texture);
+
+    if (currentTextureRef.current) {
+      currentTextureRef.current.dispose();
+    }
+    const newTexture = new CanvasTexture(canvas);
+    currentTextureRef.current = newTexture;
+    onTextureUpdate(newTexture);
   };
 
   useEffect(() => {
     initCanvas();
+    return () => {
+      if (currentTextureRef.current) {
+        currentTextureRef.current.dispose();
+      }
+    };
   }, [existingTexture, width, height]);
 
   const drawLine = (x0: number, y0: number, x1: number, y1: number, ctx: CanvasRenderingContext2D) => {
@@ -130,8 +140,14 @@ export const WrapDesigner: React.FC<WrapDesignerProps> = ({
   const updateTexture = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const texture = new CanvasTexture(canvas);
-    onTextureUpdate(texture);
+    if (currentTextureRef.current) {
+      currentTextureRef.current.needsUpdate = true;
+      onTextureUpdate(currentTextureRef.current);
+    } else {
+      const newTexture = new CanvasTexture(canvas);
+      currentTextureRef.current = newTexture;
+      onTextureUpdate(newTexture);
+    }
   };
 
   const clearCanvas = () => {
