@@ -56,6 +56,11 @@ export type Sprite360Options = {
   tile?: number; // square tile size in px (default 320)
 };
 
+// Named camera presets the HUD can fly to. "full" frames the whole car (the
+// default load view); "wrap" pushes into a front 3/4 of the body panels;
+// "tint" swings to the side at window height; "model" is an overview reset.
+export type FocusView = "full" | "wrap" | "tint" | "model";
+
 export type ThreeSceneHandle = {
   applyWrap: (config: WrapConfig) => void;
   loadCar: (path: string, onDone?: () => void) => void;
@@ -64,6 +69,7 @@ export type ThreeSceneHandle = {
   setEnvironment: (env: EnvironmentMode) => void;
   applyWindowTint: (color: string | null) => void;
   captureSprite360: (opts?: Sprite360Options) => Sprite360Result | null;
+  focusView: (view: FocusView) => void;
 };
 
 // ── Internal types ────────────────────────────────────────────────────────────
@@ -558,6 +564,7 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(
     const captureRef = useRef<
       ((opts?: Sprite360Options) => Sprite360Result | null) | null
     >(null);
+    const focusRef = useRef<((view: FocusView) => void) | null>(null);
 
     // ── Imperative handle ──────────────────────────────────────────────────────
     useImperativeHandle(
@@ -570,6 +577,7 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(
         setEnvironment: (env) => envActionsRef.current?.setEnvironment(env),
         applyWindowTint: (color) => applyWindowTintRef.current?.(color),
         captureSprite360: (opts) => captureRef.current?.(opts) ?? null,
+        focusView: (view) => focusRef.current?.(view),
       }),
       [],
     );
@@ -721,6 +729,64 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(
       controls.dampingFactor = 0.05;
       controls.minDistance = 2;
       controls.maxDistance = 20;
+
+      // ── Camera "focus" presets + fly-to animation ───────────────────────────────
+      // The default framing captured at load time, plus the car's fitted size, so
+      // focusView() can compute window-height / body presets relative to the model.
+      const defaultCamPos = new THREE.Vector3(0, 2, 8);
+      const defaultTarget = new THREE.Vector3(0, 0.8, 0);
+      const modelFit = new THREE.Vector3(4, 1.5, 2);
+      let modelCamDist = 8;
+
+      // Active fly-to tween; the animate loop interpolates it each frame.
+      let focusTween: {
+        fromPos: THREE.Vector3;
+        toPos: THREE.Vector3;
+        fromTarget: THREE.Vector3;
+        toTarget: THREE.Vector3;
+        start: number;
+        dur: number;
+      } | null = null;
+
+      const easeInOutCubic = (t: number) =>
+        t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+      const focusView = (view: FocusView): void => {
+        if (!currentModelRef.current) return;
+        const f = modelFit;
+        const d = modelCamDist;
+        let toPos: THREE.Vector3;
+        let toTarget: THREE.Vector3;
+
+        switch (view) {
+          case "wrap":
+            // Front 3/4, pushed in to fill the frame with body panels.
+            toPos = new THREE.Vector3(f.x * 0.9, f.y * 0.7, d * 0.72);
+            toTarget = new THREE.Vector3(0, f.y * 0.45, 0);
+            break;
+          case "tint":
+            // Swing to the side at window height so the glass is centred.
+            toPos = new THREE.Vector3(d * 0.72, f.y * 0.62, d * 0.32);
+            toTarget = new THREE.Vector3(0, f.y * 0.62, 0);
+            break;
+          case "model":
+          case "full":
+          default:
+            toPos = defaultCamPos.clone();
+            toTarget = defaultTarget.clone();
+        }
+
+        focusTween = {
+          fromPos: camera.position.clone(),
+          toPos,
+          fromTarget: controls.target.clone(),
+          toTarget,
+          start: performance.now(),
+          dur: 750,
+        };
+        controls.enabled = false; // hand control to the tween until it lands
+      };
+      focusRef.current = focusView;
 
       const loader = new GLTFLoader();
       const raycaster = new THREE.Raycaster();
@@ -1397,6 +1463,15 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(
             controls.target.set(0, fitted.y * 0.4, 0);
             controls.update();
 
+            // Remember this framing so focusView() can fly back to it and derive
+            // the wrap/tint presets from the actual car size.
+            modelFit.copy(fitted);
+            modelCamDist = camDist;
+            defaultCamPos.set(0, fitted.y * 0.8, camDist);
+            defaultTarget.set(0, fitted.y * 0.4, 0);
+            focusTween = null;
+            controls.enabled = true;
+
             // ── Contact shadow blob: fit to car footprint ───────────────────────
             // 1.15× gives a slight "halo" beyond the tire edges.
             contactShadow.scale.set(fitted.x * 1.15, fitted.z * 1.15, 1);
@@ -1662,6 +1737,25 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(
       let frameId: number;
       const animate = () => {
         frameId = requestAnimationFrame(animate);
+
+        if (focusTween) {
+          const t = Math.min(
+            1,
+            (performance.now() - focusTween.start) / focusTween.dur,
+          );
+          const e = easeInOutCubic(t);
+          camera.position.lerpVectors(focusTween.fromPos, focusTween.toPos, e);
+          controls.target.lerpVectors(
+            focusTween.fromTarget,
+            focusTween.toTarget,
+            e,
+          );
+          if (t >= 1) {
+            focusTween = null;
+            controls.enabled = true; // return control to the user
+          }
+        }
+
         controls.update();
         renderer.render(scene, camera);
       };
@@ -1678,6 +1772,7 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(
           pickModeActionsRef.current =
           envActionsRef.current =
           captureRef.current =
+          focusRef.current =
             null;
         cancelAnimationFrame(frameId);
         observer.disconnect();
