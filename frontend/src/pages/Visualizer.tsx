@@ -1,4 +1,5 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
@@ -10,10 +11,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Car, Palette, Download, Share, Quote } from "lucide-react";
-import ThreeScene, { type ThreeSceneHandle, type WrapConfig } from "@/components/ThreeScene";
+import { Car, Palette, Download, Share, Quote, Loader2, RotateCw } from "lucide-react";
+import ThreeScene, {
+  type ThreeSceneHandle,
+  type WrapConfig,
+  type Sprite360Result,
+} from "@/components/ThreeScene";
+import Sprite360Viewer from "@/components/Sprite360Viewer";
 import { CAR_MODELS, CAR_MODELS_BY_CATEGORY, type CarModel } from "@/data/cars";
 
 // ── Category icons ────────────────────────────────────────────────────────────
@@ -53,15 +67,35 @@ const WRAP_FINISHES: WrapFinish[] = [
   { name: "Carbon Fiber",    color: "#2c2c2c", type: "Textured", price: 3800, wrapConfig: { type: "carbon" } },
 ];
 
+// ── Share-link helpers ────────────────────────────────────────────────────────
+// Wraps are identified in URLs by a stable slug derived from their name.
+const wrapSlug = (wrap: WrapFinish) =>
+  wrap.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+const findWrapBySlug = (slug: string | null) =>
+  WRAP_FINISHES.find((w) => wrapSlug(w) === slug);
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 const Visualizer = () => {
   const sceneRef = useRef<ThreeSceneHandle>(null);
 
+  // Read any shared config (?car=…&wrap=…) once, before first render.
+  const initialParams = new URLSearchParams(window.location.search);
+
   // Starts true: ThreeScene auto-loads 911 on mount, wipePaintSet fires first
   const [loading,      setLoading]      = useState(true);
-  const [selectedCar,  setSelectedCar]  = useState<CarModel>(CAR_MODELS[0]);
-  const [selectedWrap, setSelectedWrap] = useState<WrapFinish>(WRAP_FINISHES[0]);
+  const [selectedCar,  setSelectedCar]  = useState<CarModel>(
+    () => CAR_MODELS.find((c) => c.id === initialParams.get("car")) ?? CAR_MODELS[0],
+  );
+  const [selectedWrap, setSelectedWrap] = useState<WrapFinish>(
+    () => findWrapBySlug(initialParams.get("wrap")) ?? WRAP_FINISHES[0],
+  );
+
+  // 360 sprite-sheet export state
+  const [sprite,    setSprite]    = useState<Sprite360Result | null>(null);
+  const [showSave,  setShowSave]  = useState(false);
+  const [capturing, setCapturing] = useState(false);
 
   // Stable ref so onPaintSetChange closure always reads the latest wrap
   const selectedWrapRef = useRef(selectedWrap);
@@ -91,6 +125,58 @@ const Visualizer = () => {
       sceneRef.current?.applyWrap(wrap.wrapConfig);
     }
     // If loading, selectedWrapRef will be applied automatically once model finishes
+  };
+
+  // On mount, if a shared link selected a non-default car, load it.
+  // selectedWrapRef already holds the shared wrap, so handlePaintSetChange applies it.
+  useEffect(() => {
+    if (selectedCar.id !== CAR_MODELS[0].id) {
+      sceneRef.current?.loadCar(selectedCar.path);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Share: copy a deep link that restores this car + wrap ───────────────────
+  const handleShare = async () => {
+    const params = new URLSearchParams({ car: selectedCar.id, wrap: wrapSlug(selectedWrap) });
+    const url = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success("Share link copied to clipboard", { description: url });
+    } catch {
+      toast("Copy this share link", { description: url });
+    }
+  };
+
+  // ── Save: render a 360 turntable into one JPEG sprite sheet ──────────────────
+  const handleSave360 = () => {
+    if (loading) {
+      toast("Model is still loading — try again in a moment.");
+      return;
+    }
+    setCapturing(true);
+    // Defer one frame so the "capturing" spinner paints before the (synchronous)
+    // multi-angle render runs.
+    requestAnimationFrame(() => {
+      const result = sceneRef.current?.captureSprite360({ frames: 36, cols: 6, tile: 320 }) ?? null;
+      setCapturing(false);
+      if (!result) {
+        toast.error("Couldn't capture the 360 — make sure a model is loaded.");
+        return;
+      }
+      setSprite(result);
+      setShowSave(true);
+    });
+  };
+
+  const handleDownload = () => {
+    if (!sprite) return;
+    const a = document.createElement("a");
+    a.href = sprite.dataUrl;
+    a.download = `${selectedCar.id}-${wrapSlug(selectedWrap)}-360.jpg`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   };
 
   return (
@@ -229,11 +315,15 @@ const Visualizer = () => {
                 <div className="flex items-center justify-between">
                   <CardTitle>Live Preview</CardTitle>
                   <div className="flex items-center space-x-2">
-                    <Button variant="outline" size="sm">
-                      <Download className="w-4 h-4 mr-2" />
-                      Save
+                    <Button variant="outline" size="sm" onClick={handleSave360} disabled={loading || capturing}>
+                      {capturing ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Download className="w-4 h-4 mr-2" />
+                      )}
+                      Save 360°
                     </Button>
-                    <Button variant="outline" size="sm">
+                    <Button variant="outline" size="sm" onClick={handleShare}>
                       <Share className="w-4 h-4 mr-2" />
                       Share
                     </Button>
@@ -319,6 +409,38 @@ const Visualizer = () => {
           </div>
         </div>
       </div>
+
+      {/* 360 preview + download dialog */}
+      <Dialog open={showSave} onOpenChange={setShowSave}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>360° View — {selectedCar.name}</DialogTitle>
+            <DialogDescription>
+              {selectedWrap.name} · drag the image left/right to spin. Saved as a single
+              JPG ({sprite ? `${sprite.frames} frames` : ""}).
+            </DialogDescription>
+          </DialogHeader>
+
+          {sprite && (
+            <div className="flex flex-col items-center gap-2">
+              <Sprite360Viewer sprite={sprite} />
+              <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                <RotateCw className="w-3 h-3" /> Drag to rotate
+              </p>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSave(false)}>
+              Close
+            </Button>
+            <Button onClick={handleDownload}>
+              <Download className="w-4 h-4 mr-2" />
+              Download JPG
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Footer />
     </div>

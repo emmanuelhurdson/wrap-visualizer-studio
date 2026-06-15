@@ -40,12 +40,29 @@ export type WrapConfig =
 
 export type EnvironmentMode = 'garage' | 'studio' | 'solid';
 
+// Result of a 360 turntable capture: a single JPEG sprite sheet plus the grid
+// metadata the Sprite360Viewer needs to slice it back into frames.
+export type Sprite360Result = {
+  dataUrl: string;  // image/jpeg data URL of the full sprite sheet
+  frames:  number;  // total angle frames captured
+  cols:    number;  // tiles per row
+  rows:    number;  // tile rows
+  tile:    number;  // pixel size of each square tile
+};
+
+export type Sprite360Options = {
+  frames?: number;  // angles around the car (default 36 → 10° steps)
+  cols?:   number;  // sheet columns (default 6)
+  tile?:   number;  // square tile size in px (default 320)
+};
+
 export type ThreeSceneHandle = {
-  applyWrap:      (config: WrapConfig) => void;
-  loadCar:        (path: string, onDone?: () => void) => void;
-  setPickMode:    (on: boolean) => void;
-  clearPaintSet:  () => void;
-  setEnvironment: (env: EnvironmentMode) => void;
+  applyWrap:       (config: WrapConfig) => void;
+  loadCar:         (path: string, onDone?: () => void) => void;
+  setPickMode:     (on: boolean) => void;
+  clearPaintSet:   () => void;
+  setEnvironment:  (env: EnvironmentMode) => void;
+  captureSprite360: (opts?: Sprite360Options) => Sprite360Result | null;
 };
 
 // ── Internal types ────────────────────────────────────────────────────────────
@@ -76,8 +93,14 @@ const BODY_EXCLUDE = [
   'chrome', 'mirror', 'light', 'lamp', 'headlight', 'taillight',
   'disk', 'disc', 'exhaust', 'pipe', 'muffler',
   'badge', 'logo', 'emblem', 'decal', 'plate', 'number',
-  'shadow', 'floor', 'ground', 'carpet', 'interior', 'seat', 'dash',
+  'shadow', 'floor', 'ground', 'carpet',
+  // interior geometry — mesh names, material names, and parent-node names are all checked
+  'interior', 'inner', 'inside', 'seat', 'dash', 'dashboard',
+  'cabin', 'cockpit', 'steer', 'steering', 'pedal', 'console',
+  'gauges', 'cluster', 'headrest', 'seatbelt', 'armrest',
+  'door_int', 'inner_door', 'door_panel',
   'underbody', 'frame', 'chassis',
+  'headliner', 'lining',
 ];
 
 function disposeModel(root: THREE.Group): void {
@@ -118,6 +141,34 @@ function makeCarbonFiberTexture(): THREE.CanvasTexture {
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set(8, 8);
   return tex;
+}
+
+// Samples up to maxSamples vertex normals (world space) and checks what fraction
+// point AWAY from carCenter. Ratio ≥ threshold → exterior surface; below → interior.
+// Threshold of 0.40 is conservative: only meshes where fewer than 40 % of normals
+// face outward (seats, dashboards, door liners, …) get excluded.
+const OUTWARD_RATIO_THRESHOLD = 0.40;
+
+function isOutwardFacingMesh(mesh: THREE.Mesh, carCenter: THREE.Vector3, maxSamples = 200): boolean {
+  const posAttr  = mesh.geometry.attributes.position;
+  const normAttr = mesh.geometry.attributes.normal;
+  if (!posAttr || !normAttr) return true;
+
+  const wp   = new THREE.Vector3();
+  const wn   = new THREE.Vector3();
+  const toC  = new THREE.Vector3();
+  const step = Math.max(1, Math.floor(posAttr.count / maxSamples));
+  let outward = 0, total = 0;
+
+  for (let i = 0; i < posAttr.count; i += step) {
+    wp.fromBufferAttribute(posAttr, i).applyMatrix4(mesh.matrixWorld);
+    wn.fromBufferAttribute(normAttr, i).transformDirection(mesh.matrixWorld).normalize();
+    toC.subVectors(carCenter, wp).normalize();
+    if (wn.dot(toC) < 0) outward++;
+    total++;
+  }
+
+  return total === 0 || (outward / total) >= OUTWARD_RATIO_THRESHOLD;
 }
 
 // Radial gradient used as alphaMap on the concrete floor.
@@ -190,14 +241,16 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ onPaintSetCh
   const applyWrapRef       = useRef<((config: WrapConfig) => void) | null>(null);
   const pickModeActionsRef = useRef<{ setPickMode: (on: boolean) => void; clearPaintSet: () => void } | null>(null);
   const envActionsRef      = useRef<{ setEnvironment: (env: EnvironmentMode) => void } | null>(null);
+  const captureRef         = useRef<((opts?: Sprite360Options) => Sprite360Result | null) | null>(null);
 
   // ── Imperative handle ──────────────────────────────────────────────────────
   useImperativeHandle(ref, () => ({
-    applyWrap:      (cfg)        => applyWrapRef.current?.(cfg),
-    loadCar:        (path, done) => loadModelRef.current?.(path, done),
-    setPickMode:    (on)         => pickModeActionsRef.current?.setPickMode(on),
-    clearPaintSet:  ()           => pickModeActionsRef.current?.clearPaintSet(),
-    setEnvironment: (env)        => envActionsRef.current?.setEnvironment(env),
+    applyWrap:        (cfg)        => applyWrapRef.current?.(cfg),
+    loadCar:          (path, done) => loadModelRef.current?.(path, done),
+    setPickMode:      (on)         => pickModeActionsRef.current?.setPickMode(on),
+    clearPaintSet:    ()           => pickModeActionsRef.current?.clearPaintSet(),
+    setEnvironment:   (env)        => envActionsRef.current?.setEnvironment(env),
+    captureSprite360: (opts)       => captureRef.current?.(opts) ?? null,
   }), []);
 
   // ── Three.js setup ─────────────────────────────────────────────────────────
@@ -212,7 +265,9 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ onPaintSetCh
     let currentEnvRT:  THREE.WebGLRenderTarget | null = null;
 
     // ── Renderer ──────────────────────────────────────────────────────────────
-    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    // preserveDrawingBuffer keeps the WebGL backbuffer readable after render so
+    // captureSprite360 can drawImage() the canvas into a 2D sprite sheet.
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(canvas.clientWidth || window.innerWidth, canvas.clientHeight || window.innerHeight, false);
     renderer.shadowMap.enabled = true;
@@ -316,7 +371,6 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ onPaintSetCh
       depthWrite:  false,
       depthTest:   true,
       blending:    THREE.MultiplyBlending,
-      renderOrder: 1,
     });
     const contactShadow = new THREE.Mesh(
       new THREE.PlaneGeometry(1, 1), // scaled per car in loadModel
@@ -545,46 +599,161 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ onPaintSetCh
     // ── Auto-detection ────────────────────────────────────────────────────────
 
     const autoDetectPaintSet = (model: THREE.Group): void => {
-      const groups = new Map<string, { meshes: THREE.Mesh[]; volume: number }>();
+      model.updateMatrixWorld(true);
+      const carBBox   = new THREE.Box3().setFromObject(model);
+      const carCenter = carBBox.getCenter(new THREE.Vector3());
+
+      type Group = { meshes: THREE.Mesh[]; volume: number; hasAlbedoTex: boolean };
+      const groups = new Map<string, Group>();
 
       model.traverse((child) => {
         if (!(child instanceof THREE.Mesh)) return;
-        const raw     = Array.isArray(child.material) ? child.material[0] : child.material;
+        const raw     = (Array.isArray(child.material) ? child.material[0] : child.material) as THREE.MeshStandardMaterial;
         const matName = raw.name || `__unnamed_${child.uuid.slice(0, 8)}`;
-        const g       = groups.get(matName) ?? { meshes: [], volume: 0 };
+        const g       = groups.get(matName) ?? { meshes: [], volume: 0, hasAlbedoTex: false };
         const s       = new THREE.Box3().setFromObject(child).getSize(new THREE.Vector3());
         g.volume += s.x * s.y * s.z;
         g.meshes.push(child);
+        // Albedo texture = interior fabric/leather; exterior car paint is textureless.
+        if (raw.map) g.hasAlbedoTex = true;
         groups.set(matName, g);
       });
 
       const sorted = Array.from(groups.entries()).sort((a, b) => b[1].volume - a[1].volume);
 
+      // Checks the mesh's OWN name AND its per-mesh material name against the exclude list.
+      // This is separate from the group-level material-name check and the hierarchy walk.
+      const meshDirectHit = (mesh: THREE.Mesh): string | undefined => {
+        const meshN = mesh.name.toLowerCase();
+        const mat   = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+        const matN  = (mat as THREE.MeshStandardMaterial).name.toLowerCase();
+        return BODY_EXCLUDE.find(kw => meshN.includes(kw) || matN.includes(kw));
+      };
+
+      // Walks the full parent-node chain (mesh name + every ancestor's name).
+      const isExcludedByHierarchy = (mesh: THREE.Mesh): boolean => {
+        let node: THREE.Object3D | null = mesh;
+        while (node) {
+          if (BODY_EXCLUDE.some(kw => node!.name.toLowerCase().includes(kw))) return true;
+          node = node.parent;
+        }
+        return false;
+      };
+
       console.log('── Material group analysis ──────────────────────────');
-      for (const [name, { meshes, volume }] of sorted) {
-        const hit = BODY_EXCLUDE.find(kw => name.toLowerCase().includes(kw));
-        console.log(`  "${name}"  meshes:${meshes.length}  vol:${volume.toFixed(4)}${hit ? `  ✗ (${hit})` : ''}`);
+      for (const [matName, { meshes, volume, hasAlbedoTex }] of sorted) {
+        const matHit   = BODY_EXCLUDE.find(kw => matName.toLowerCase().includes(kw));
+        const meshHit  = meshes.map(meshDirectHit).find(Boolean);   // first mesh-name hit
+        const hierHit  = !matHit && !meshHit && meshes.some(isExcludedByHierarchy);
+        const names    = meshes.map(m => `"${m.name}"`).join(', ');
+        console.log(
+          `  mat:"${matName}"  meshes:[${names}]  vol:${volume.toFixed(2)}` +
+          (hasAlbedoTex ? '  [tex]'                    : '') +
+          (matHit       ? `  ✗ mat(${matHit})`         : '') +
+          (meshHit      ? `  ✗ mesh(${meshHit})`       : '') +
+          (hierHit      ? '  ✗ hier'                   : ''),
+        );
       }
 
-      const candidates = sorted.filter(([name]) =>
-        !BODY_EXCLUDE.some(kw => name.toLowerCase().includes(kw)),
-      );
+      // A group is a body-paint candidate if ALL of:
+      //   • Material name has no excluded keyword
+      //   • No mesh in the group has an excluded name or per-mesh material name
+      //   • No mesh has an ancestor node with an excluded name
+      //   • No mesh uses a diffuse (albedo) texture — car paint is plain colour;
+      //     interior fabric/leather always has a texture map
+      const isBodyCandidate = ([name, g]: [string, Group]) =>
+        !BODY_EXCLUDE.some(kw => name.toLowerCase().includes(kw)) &&
+        !g.meshes.some(m => meshDirectHit(m) !== undefined) &&
+        !g.meshes.some(isExcludedByHierarchy) &&
+        !g.hasAlbedoTex;
+
+      let candidates = sorted.filter(isBodyCandidate);
+
+      // Fallback: all groups have albedo textures (uncommon — some exports bake paint).
+      // Relax the texture filter but keep all name/hierarchy filters.
+      if (candidates.length === 0) {
+        candidates = sorted.filter(([name, g]) =>
+          !BODY_EXCLUDE.some(kw => name.toLowerCase().includes(kw)) &&
+          !g.meshes.some(m => meshDirectHit(m) !== undefined) &&
+          !g.meshes.some(isExcludedByHierarchy),
+        );
+        if (candidates.length > 0) {
+          console.log('[ThreeScene] All groups have textures — relaxed texture filter (fallback)');
+        }
+      }
 
       if (candidates.length === 0) {
-        console.warn('[ThreeScene] No candidates passed filter — selecting all meshes');
-        model.traverse((child) => { if (child instanceof THREE.Mesh) addToPaintSet(child); });
+        console.warn('[ThreeScene] No candidates passed filter — applying name-filtered fallback');
+        model.traverse((child) => {
+          if (!(child instanceof THREE.Mesh)) return;
+          const meshN = child.name.toLowerCase();
+          const mat   = (Array.isArray(child.material) ? child.material[0] : child.material) as THREE.MeshStandardMaterial;
+          const matN  = mat.name.toLowerCase();
+          if (BODY_EXCLUDE.some(kw => meshN.includes(kw) || matN.includes(kw))) return;
+          let node: THREE.Object3D | null = child;
+          while (node) {
+            if (BODY_EXCLUDE.some(kw => node!.name.toLowerCase().includes(kw))) return;
+            node = node.parent;
+          }
+          if (isOutwardFacingMesh(child, carCenter)) addToPaintSet(child);
+        });
         console.log('─────────────────────────────────────────────────────');
         return;
       }
 
+      // Take groups within 85 % of the largest volume, capped at 2 groups.
       const topVol   = candidates[0][1].volume;
-      const selected = candidates.filter(([, g]) => g.volume >= topVol * 0.8).slice(0, 3);
+      const selected = candidates.filter(([, g]) => g.volume >= topVol * 0.85).slice(0, 2);
+
+      // ── Merged-mesh heuristic ────────────────────────────────────────────────
+      // If the model has NO separately-named interior meshes, body+interior may be
+      // merged into one object. Flag any selected mesh whose bounding volume
+      // exceeds 55 % of the whole model's bounding volume as a likely merged mesh.
+      const INTERIOR_KWS = [
+        'interior', 'seat', 'dash', 'cabin', 'cockpit', 'carpet', 'headrest',
+      ];
+      let modelHasInteriorMeshes = false;
+      model.traverse((c) => {
+        if (!(c instanceof THREE.Mesh) || modelHasInteriorMeshes) return;
+        const n  = c.name.toLowerCase();
+        const mn = ((Array.isArray(c.material) ? c.material[0] : c.material) as THREE.MeshStandardMaterial).name.toLowerCase();
+        if (INTERIOR_KWS.some(kw => n.includes(kw) || mn.includes(kw))) modelHasInteriorMeshes = true;
+      });
+
+      if (!modelHasInteriorMeshes) {
+        const modelBbox = new THREE.Box3().setFromObject(model);
+        const ms        = modelBbox.getSize(new THREE.Vector3());
+        const modelVol  = ms.x * ms.y * ms.z;
+        for (const [, { meshes }] of selected) {
+          for (const mesh of meshes) {
+            const mb  = new THREE.Box3().setFromObject(mesh);
+            const mbs = mb.getSize(new THREE.Vector3());
+            const ratio = modelVol > 0 ? (mbs.x * mbs.y * mbs.z) / modelVol : 0;
+            if (ratio > 0.55) {
+              console.warn(
+                `%c[ThreeScene] ⚠ MERGED MESH: "${mesh.name}" ` +
+                `(mat:"${(mesh.material as THREE.MeshStandardMaterial).name}") ` +
+                `covers ${(ratio * 100).toFixed(0)}% of model bbox — no separate interior meshes found.\n` +
+                `  If interior surfaces bleed color this GLB merges body+interior geometry. Fix: separate in Blender.`,
+                'color:#f97316;font-weight:bold',
+              );
+            }
+          }
+        }
+      }
+      // ────────────────────────────────────────────────────────────────────────
 
       console.log(`── Auto-selected: ${selected.map(([n]) => `"${n}"`).join(', ')}`);
       console.log('─────────────────────────────────────────────────────');
 
       for (const [, { meshes }] of selected) {
-        for (const mesh of meshes) addToPaintSet(mesh);
+        for (const mesh of meshes) {
+          if (isOutwardFacingMesh(mesh, carCenter)) {
+            addToPaintSet(mesh);
+          } else {
+            console.log(`  [ThreeScene] normal-check excluded "${mesh.name}" (mat:"${(mesh.material as THREE.MeshStandardMaterial).name}") — interior-facing normals`);
+          }
+        }
       }
     };
 
@@ -698,6 +867,29 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ onPaintSetCh
 
           onPaintSetChangeRef.current?.(paintSetRef.current.size);
 
+          // ── Selected-mesh diagnostic (world-space bbox + material isolation) ──
+          if (paintSetRef.current.size > 0) {
+            console.groupCollapsed(
+              `%c[ThreeScene] ${paintSetRef.current.size} wrap target(s) — world bbox`,
+              'color:#60a5fa;font-weight:700',
+            );
+            for (const [, entry] of paintSetRef.current) {
+              const m   = entry.mesh;
+              const mat = m.material as THREE.MeshStandardMaterial;
+              const b   = new THREE.Box3().setFromObject(m);
+              const sz  = b.getSize(new THREE.Vector3());
+              const ct  = b.getCenter(new THREE.Vector3());
+              console.log(
+                `  mesh:"${m.name}"  mat:"${mat.name}" [own clone ✓]` +
+                `  centre(${ct.x.toFixed(2)}, ${ct.y.toFixed(2)}, ${ct.z.toFixed(2)})` +
+                `  size(${sz.x.toFixed(2)} × ${sz.y.toFixed(2)} × ${sz.z.toFixed(2)})`,
+              );
+            }
+            console.groupEnd();
+          }
+
+          // ── Full mesh inventory ──────────────────────────────────────────────
+          // Shows every mesh in the loaded model; ✓ means it is a wrap target.
           console.log('── Mesh inventory ───────────────────────────────────');
           model.traverse((child) => {
             if (child instanceof THREE.Mesh) {
@@ -705,7 +897,7 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ onPaintSetCh
                 ? child.material.map(m => m.name).join(', ')
                 : (child.material as THREE.Material).name;
               const tag = paintSetRef.current.has(child.uuid) ? '  ✓ wrap target' : '';
-              console.log(`  "${child.name}"  mat:"${matName}"${tag}`);
+              console.log(`  mesh:"${child.name}"  mat:"${matName}"${tag}`);
             }
           });
           console.log('─────────────────────────────────────────────────────');
@@ -725,6 +917,80 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ onPaintSetCh
     };
 
     loadModelRef.current = loadModel;
+
+    // ── 360 turntable capture ───────────────────────────────────────────────────
+    // Orbits the camera a full circle around the current target, rendering each
+    // angle into one square tile of a JPEG sprite sheet. The current camera
+    // elevation and distance are preserved, then fully restored afterwards, so the
+    // live view is unchanged once capture finishes.
+
+    const captureSprite360 = (opts?: Sprite360Options): Sprite360Result | null => {
+      if (!currentModelRef.current) return null;
+
+      const frames = Math.max(1, opts?.frames ?? 36);
+      const cols   = Math.max(1, opts?.cols   ?? 6);
+      const tile   = Math.max(16, opts?.tile  ?? 320);
+      const rows   = Math.ceil(frames / cols);
+
+      // Snapshot live renderer/camera/controls state so we can restore it.
+      const prevSize   = renderer.getSize(new THREE.Vector2());
+      const prevPixel  = renderer.getPixelRatio();
+      const prevAspect = camera.aspect;
+      const prevCamPos = camera.position.clone();
+      const prevTarget = controls.target.clone();
+
+      // Build the 2D sprite sheet canvas.
+      const sheet = document.createElement('canvas');
+      sheet.width  = cols * tile;
+      sheet.height = rows * tile;
+      const sctx = sheet.getContext('2d')!;
+      sctx.fillStyle = '#1a1a1a';
+      sctx.fillRect(0, 0, sheet.width, sheet.height);
+
+      // Render square tiles at 1:1 pixel ratio for crisp, undistorted frames.
+      renderer.setPixelRatio(1);
+      renderer.setSize(tile, tile, false);
+      camera.aspect = 1;
+      camera.updateProjectionMatrix();
+
+      // Decompose the current camera offset into a horizontal radius + fixed
+      // height, so every captured frame keeps the same pitch as the live view.
+      const target  = prevTarget.clone();
+      const offset  = prevCamPos.clone().sub(target);
+      const radius  = offset.length() || 1;
+      const yHeight = offset.y;
+      const horiz   = Math.sqrt(Math.max(0, radius * radius - yHeight * yHeight));
+      const startTheta = Math.atan2(offset.x, offset.z);
+
+      for (let i = 0; i < frames; i++) {
+        const theta = startTheta + (i / frames) * Math.PI * 2;
+        camera.position.set(
+          target.x + horiz * Math.sin(theta),
+          target.y + yHeight,
+          target.z + horiz * Math.cos(theta),
+        );
+        camera.lookAt(target);
+        renderer.render(scene, camera);
+
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        sctx.drawImage(renderer.domElement, col * tile, row * tile, tile, tile);
+      }
+
+      // Restore the live view exactly as it was.
+      renderer.setPixelRatio(prevPixel);
+      renderer.setSize(prevSize.x, prevSize.y, false);
+      camera.aspect = prevAspect;
+      camera.updateProjectionMatrix();
+      camera.position.copy(prevCamPos);
+      controls.target.copy(prevTarget);
+      controls.update();
+      renderer.render(scene, camera);
+
+      return { dataUrl: sheet.toDataURL('image/jpeg', 0.9), frames, cols, rows, tile };
+    };
+
+    captureRef.current = captureSprite360;
 
     // ── Click-to-paint ────────────────────────────────────────────────────────
 
@@ -798,7 +1064,7 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ onPaintSetCh
     // ── Cleanup ───────────────────────────────────────────────────────────────
     return () => {
       mounted = false;
-      loadModelRef.current = applyWrapRef.current = pickModeActionsRef.current = envActionsRef.current = null;
+      loadModelRef.current = applyWrapRef.current = pickModeActionsRef.current = envActionsRef.current = captureRef.current = null;
       cancelAnimationFrame(frameId);
       observer.disconnect();
       canvas.removeEventListener('mousedown', onMouseDown);
