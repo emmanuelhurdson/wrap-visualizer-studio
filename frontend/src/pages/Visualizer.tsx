@@ -7,70 +7,150 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Car, Palette, Download, Share, Quote, Loader2, RotateCw } from "lucide-react";
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { Car, Palette, Download, Share, Search } from "lucide-react";
 import ThreeScene, {
   type ThreeSceneHandle,
   type WrapConfig,
-  type Sprite360Result,
 } from "@/components/ThreeScene";
-import Sprite360Viewer from "@/components/Sprite360Viewer";
 import { CAR_MODELS, CAR_MODELS_BY_CATEGORY, type CarModel } from "@/data/cars";
 
 // ── Category icons ────────────────────────────────────────────────────────────
 const CAT_ICON: Record<string, string> = {
-  Coupe:      "🏎️",
-  Hatchback:  "🚗",
-  "Mini SUV": "🚙",
-  Pickup:     "🛻",
-  Sedan:      "🚘",
-  SUV:        "🚐",
+  Coupe: "🏎️",
+  Hatchback: "🚗",
+  Pickup: "🛻",
+  Sedan: "🚘",
+  SUV: "🚐",
+  Truck: "🚚",
+  Wagon: "🚗",
 };
-
-// ── One quick-pick car from each category ─────────────────────────────────────
-const QUICK_PICKS: CarModel[] = Array.from(CAR_MODELS_BY_CATEGORY.values()).map(
-  (cars) => cars[0],
-);
 
 // ── Wrap finishes with Three.js WrapConfig mapping ────────────────────────────
 type WrapFinish = {
-  name:       string;
-  color:      string;
-  type:       string;
-  price:      number;
+  name: string;
+  color: string;
+  type: string;
+  style: "solid" | "shift" | "pearl" | "ppf";
+  price: number;
   wrapConfig: WrapConfig;
 };
 
+const WRAP_CATEGORIES = ["Gloss", "Satin", "Matte"] as const;
+const WRAP_STYLES = ["All", "Solid", "Shift", "Pearl", "PPF"] as const;
+
+type WrapCategory = (typeof WRAP_CATEGORIES)[number];
+type WrapStyle = (typeof WRAP_STYLES)[number];
+
 const WRAP_FINISHES: WrapFinish[] = [
-  { name: "Matte Black",     color: "#1a1a1a", type: "Matte",    price: 2800, wrapConfig: { type: "solid",    color: "#1a1a1a" } },
-  { name: "Gloss White",     color: "#f0f0f0", type: "Gloss",    price: 2500, wrapConfig: { type: "metallic", color: "#f0f0f0" } },
-  { name: "Chrome Silver",   color: "#c0c0c0", type: "Chrome",   price: 4200, wrapConfig: { type: "metallic", color: "#c0c0c0" } },
-  { name: "Orange Burst",    color: "#ff6b35", type: "Gloss",    price: 2700, wrapConfig: { type: "solid",    color: "#ff6b35" } },
-  { name: "Midnight Blue",   color: "#191970", type: "Matte",    price: 2900, wrapConfig: { type: "solid",    color: "#191970" } },
-  { name: "Racing Red",      color: "#dc143c", type: "Gloss",    price: 2600, wrapConfig: { type: "metallic", color: "#dc143c" } },
-  { name: "Forest Green",    color: "#355e3b", type: "Matte",    price: 2900, wrapConfig: { type: "solid",    color: "#355e3b" } },
-  { name: "Gold Chrome",     color: "#ffd700", type: "Chrome",   price: 4500, wrapConfig: { type: "metallic", color: "#ffd700" } },
-  { name: "Purple Metallic", color: "#663399", type: "Metallic", price: 3200, wrapConfig: { type: "metallic", color: "#663399" } },
-  { name: "Carbon Fiber",    color: "#2c2c2c", type: "Textured", price: 3800, wrapConfig: { type: "carbon" } },
+  {
+    name: "Gloss White",
+    color: "#f0f0f0",
+    type: "Gloss",
+    style: "solid",
+    price: 2500,
+    wrapConfig: { type: "metallic", color: "#f0f0f0" },
+  },
+  {
+    name: "Gloss Red",
+    color: "#dc143c",
+    type: "Gloss",
+    style: "solid",
+    price: 2600,
+    wrapConfig: { type: "metallic", color: "#dc143c" },
+  },
+  {
+    name: "Gloss Silver",
+    color: "#c0c0c0",
+    type: "Gloss",
+    style: "shift",
+    price: 4200,
+    wrapConfig: { type: "metallic", color: "#c0c0c0" },
+  },
+  {
+    name: "Satin Steel",
+    color: "#8b8d90",
+    type: "Satin",
+    style: "solid",
+    price: 3000,
+    wrapConfig: { type: "solid", color: "#8b8d90" },
+  },
+  {
+    name: "Satin Midnight",
+    color: "#283149",
+    type: "Satin",
+    style: "solid",
+    price: 3200,
+    wrapConfig: { type: "solid", color: "#283149" },
+  },
+  {
+    name: "Satin Pearl",
+    color: "#e8eaf6",
+    type: "Satin",
+    style: "pearl",
+    price: 3000,
+    wrapConfig: { type: "solid", color: "#e8eaf6" },
+  },
+  {
+    name: "Matte Black",
+    color: "#1a1a1a",
+    type: "Matte",
+    style: "solid",
+    price: 2800,
+    wrapConfig: { type: "solid", color: "#1a1a1a" },
+  },
+  {
+    name: "Matte Blue",
+    color: "#191970",
+    type: "Matte",
+    style: "solid",
+    price: 2900,
+    wrapConfig: { type: "solid", color: "#191970" },
+  },
+  {
+    name: "Matte Green",
+    color: "#355e3b",
+    type: "Matte",
+    style: "solid",
+    price: 2900,
+    wrapConfig: { type: "solid", color: "#355e3b" },
+  },
+  {
+    name: "Carbon Fiber",
+    color: "#2c2c2c",
+    type: "Matte",
+    style: "ppf",
+    price: 3800,
+    wrapConfig: { type: "carbon" },
+  },
+];
+
+const TINT_PRESETS = [
+  { name: "Limo Black", color: "#14171d" },
+  { name: "Dark Smoke", color: "#232b34" },
+  { name: "Medium Smoke", color: "#4b5661" },
+  { name: "Light Smoke", color: "#7a8897" },
+  { name: "Ceramic Smoke", color: "#1d232a" },
 ];
 
 // ── Share-link helpers ────────────────────────────────────────────────────────
 // Wraps are identified in URLs by a stable slug derived from their name.
 const wrapSlug = (wrap: WrapFinish) =>
-  wrap.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  wrap.name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
 
 const findWrapBySlug = (slug: string | null) =>
   WRAP_FINISHES.find((w) => wrapSlug(w) === slug);
@@ -84,22 +164,41 @@ const Visualizer = () => {
   const initialParams = new URLSearchParams(window.location.search);
 
   // Starts true: ThreeScene auto-loads 911 on mount, wipePaintSet fires first
-  const [loading,      setLoading]      = useState(true);
-  const [selectedCar,  setSelectedCar]  = useState<CarModel>(
-    () => CAR_MODELS.find((c) => c.id === initialParams.get("car")) ?? CAR_MODELS[0],
-  );
+  const [loading, setLoading] = useState(true);
+  const [selectedCar, setSelectedCar] = useState<CarModel>(CAR_MODELS[0]);
   const [selectedWrap, setSelectedWrap] = useState<WrapFinish>(
-    () => findWrapBySlug(initialParams.get("wrap")) ?? WRAP_FINISHES[0],
+    WRAP_FINISHES[0],
   );
+  const [selectedWrapCategory, setSelectedWrapCategory] =
+    useState<WrapCategory>("Gloss");
+  const [selectedWrapStyle, setSelectedWrapStyle] = useState<WrapStyle>("All");
+  const [modelSearch, setModelSearch] = useState("");
+  const [selectedTintColor, setSelectedTintColor] = useState("#232b34");
+  const [activeTintColor, setActiveTintColor] = useState<string | null>(null);
 
-  // 360 sprite-sheet export state
-  const [sprite,    setSprite]    = useState<Sprite360Result | null>(null);
-  const [showSave,  setShowSave]  = useState(false);
-  const [capturing, setCapturing] = useState(false);
-
-  // Stable ref so onPaintSetChange closure always reads the latest wrap
   const selectedWrapRef = useRef(selectedWrap);
   selectedWrapRef.current = selectedWrap;
+
+  const handleApplyTint = (): void => {
+    if (!loading) {
+      setActiveTintColor(selectedTintColor);
+      sceneRef.current?.applyWindowTint(selectedTintColor);
+    }
+  };
+
+  const handleResetTint = (): void => {
+    if (!loading) {
+      setActiveTintColor(null);
+      sceneRef.current?.applyWindowTint(null);
+    }
+  };
+
+  const wrapOptions = WRAP_FINISHES.filter(
+    (wrap) =>
+      wrap.type === selectedWrapCategory &&
+      (selectedWrapStyle === "All" ||
+        wrap.style === selectedWrapStyle.toLowerCase()),
+  );
 
   // Called by ThreeScene whenever the paint-panel set changes:
   //   count === 0  → wipePaintSet ran (new model starting)
@@ -110,6 +209,9 @@ const Visualizer = () => {
     } else {
       setLoading(false);
       sceneRef.current?.applyWrap(selectedWrapRef.current.wrapConfig);
+      if (activeTintColor) {
+        sceneRef.current?.applyWindowTint(activeTintColor);
+      }
     }
   };
 
@@ -118,6 +220,12 @@ const Visualizer = () => {
     setSelectedCar(car);
     sceneRef.current?.loadCar(car.path);
   };
+
+  const filteredModels = CAR_MODELS.filter(
+    (car) =>
+      car.name.toLowerCase().includes(modelSearch.toLowerCase()) ||
+      car.category.toLowerCase().includes(modelSearch.toLowerCase()),
+  );
 
   const handleSelectWrap = (wrap: WrapFinish) => {
     setSelectedWrap(wrap);
@@ -138,7 +246,10 @@ const Visualizer = () => {
 
   // ── Share: copy a deep link that restores this car + wrap ───────────────────
   const handleShare = async () => {
-    const params = new URLSearchParams({ car: selectedCar.id, wrap: wrapSlug(selectedWrap) });
+    const params = new URLSearchParams({
+      car: selectedCar.id,
+      wrap: wrapSlug(selectedWrap),
+    });
     const url = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
     try {
       await navigator.clipboard.writeText(url);
@@ -158,7 +269,12 @@ const Visualizer = () => {
     // Defer one frame so the "capturing" spinner paints before the (synchronous)
     // multi-angle render runs.
     requestAnimationFrame(() => {
-      const result = sceneRef.current?.captureSprite360({ frames: 36, cols: 6, tile: 320 }) ?? null;
+      const result =
+        sceneRef.current?.captureSprite360({
+          frames: 36,
+          cols: 6,
+          tile: 320,
+        }) ?? null;
       setCapturing(false);
       if (!result) {
         toast.error("Couldn't capture the 360 — make sure a model is loaded.");
@@ -197,212 +313,288 @@ const Visualizer = () => {
       </section>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="grid lg:grid-cols-3 gap-8">
+        <div className="space-y-8">
+          <Card className="card-glass">
+            <CardHeader>
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <CardTitle>Live Preview</CardTitle>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Button variant="outline" size="sm">
+                    <Download className="w-4 h-4 mr-2" />
+                    Save
+                  </Button>
+                  <Button variant="outline" size="sm">
+                    <Share className="w-4 h-4 mr-2" />
+                    Share
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div
+                className="relative rounded-xl overflow-hidden bg-[#1a1a1a]"
+                style={{ height: "520px" }}
+              >
+                <ThreeScene
+                  ref={sceneRef}
+                  onPaintSetChange={handlePaintSetChange}
+                />
 
-          {/* Controls Panel */}
-          <div className="lg:col-span-1 space-y-6">
-            <Tabs defaultValue="model" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="model">Model</TabsTrigger>
-                <TabsTrigger value="wrap">Wrap</TabsTrigger>
-              </TabsList>
+                {loading && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm pointer-events-none">
+                    <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin mb-3" />
+                    <p className="text-white/70 text-sm">Loading model…</p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
 
-              {/* ── Model tab ──────────────────────────────────────────────── */}
-              <TabsContent value="model" className="space-y-4">
-                <Card className="card-glass">
-                  <CardHeader>
-                    <CardTitle className="flex items-center">
-                      <Car className="mr-2 w-5 h-5 text-primary" />
-                      Select Vehicle
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {/* Full list dropdown */}
-                    <Select
-                      value={selectedCar.id}
-                      onValueChange={(id) => {
-                        const car = CAR_MODELS.find((m) => m.id === id);
-                        if (car) handleSelectCar(car);
-                      }}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Choose your vehicle" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {CAR_MODELS.map((car) => (
-                          <SelectItem key={car.id} value={car.id}>
-                            {CAT_ICON[car.category] ?? "🚗"} {car.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-
-                    {/* Quick-pick grid — one per category */}
-                    <div className="mt-4 grid grid-cols-2 gap-2">
-                      {QUICK_PICKS.map((car) => (
-                        <button
-                          key={car.id}
-                          onClick={() => handleSelectCar(car)}
-                          className={`p-3 rounded-lg border-2 transition-all text-left ${
-                            selectedCar.id === car.id
-                              ? "border-primary bg-primary/10"
-                              : "border-border bg-card hover:border-primary/50"
-                          }`}
-                        >
-                          <div className="text-2xl mb-1">
-                            {CAT_ICON[car.category] ?? "🚗"}
-                          </div>
-                          <div className="text-sm font-medium leading-tight">
-                            {car.name}
-                          </div>
-                          <Badge variant="secondary" className="text-xs mt-1">
-                            {car.category}
-                          </Badge>
-                        </button>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              {/* ── Wrap tab ───────────────────────────────────────────────── */}
-              <TabsContent value="wrap" className="space-y-4">
-                <Card className="card-glass">
-                  <CardHeader>
-                    <CardTitle className="flex items-center">
-                      <Palette className="mr-2 w-5 h-5 text-primary" />
-                      Choose Wrap
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-1 gap-3 max-h-96 overflow-y-auto">
-                      {WRAP_FINISHES.map((wrap) => (
-                        <button
-                          key={wrap.name}
-                          onClick={() => handleSelectWrap(wrap)}
-                          className={`p-4 rounded-lg border-2 transition-all flex items-center space-x-3 ${
-                            selectedWrap.name === wrap.name
-                              ? "border-primary bg-primary/10"
-                              : "border-border bg-card hover:border-primary/50"
-                          }`}
-                        >
-                          <div
-                            className="w-12 h-12 rounded-lg flex-shrink-0"
-                            style={{ backgroundColor: wrap.color }}
-                          />
-                          <div className="flex-1 text-left">
-                            <div className="font-medium">{wrap.name}</div>
-                            <div className="text-sm text-muted-foreground">
-                              {wrap.type}
-                            </div>
-                            <div className="text-sm font-bold text-primary">
-                              ${wrap.price.toLocaleString()}
-                            </div>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-            </Tabs>
-          </div>
-
-          {/* Main Preview */}
-          <div className="lg:col-span-2">
+          <div className="grid lg:grid-cols-3 gap-6">
             <Card className="card-glass h-full">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>Live Preview</CardTitle>
-                  <div className="flex items-center space-x-2">
-                    <Button variant="outline" size="sm" onClick={handleSave360} disabled={loading || capturing}>
-                      {capturing ? (
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      ) : (
-                        <Download className="w-4 h-4 mr-2" />
-                      )}
-                      Save 360°
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={handleShare}>
-                      <Share className="w-4 h-4 mr-2" />
-                      Share
-                    </Button>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-6">
-
-                {/* 3D Preview */}
-                <div className="relative rounded-xl overflow-hidden bg-[#1a1a1a]" style={{ height: "460px" }}>
-                  <ThreeScene ref={sceneRef} onPaintSetChange={handlePaintSetChange} />
-
-                  {/* Loading overlay */}
-                  {loading && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm pointer-events-none">
-                      <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin mb-3" />
-                      <p className="text-white/70 text-sm">Loading model…</p>
+              <Accordion type="single" collapsible className="h-full">
+                <AccordionItem
+                  value="model"
+                  className="h-full rounded-2xl border border-border overflow-hidden"
+                >
+                  <AccordionTrigger className="px-5">
+                    <div className="flex items-center gap-2 py-4 text-base font-medium">
+                      <Car className="w-5 h-5 text-primary" />
+                      Switch Model
+                      <Search className="w-4 h-4 text-muted-foreground" />
                     </div>
-                  )}
-                </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="px-5 pt-0">
+                    <div className="space-y-6 pb-4">
+                      {/* Select dropdown removed — search bar below provides lookup */}
 
-                {/* Configuration Summary */}
-                <div className="grid md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <h3 className="font-bold text-lg">Configuration</h3>
-                    <div className="space-y-1 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Vehicle:</span>
-                        <span className="font-medium">{selectedCar.name}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Category:</span>
-                        <span className="font-medium">{selectedCar.category}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Wrap:</span>
-                        <span className="font-medium">{selectedWrap.name}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Finish:</span>
-                        <span className="font-medium">{selectedWrap.type}</span>
-                      </div>
-                    </div>
-                  </div>
+                      <div className="rounded-2xl border border-border p-4 bg-muted/10">
+                        <div className="space-y-3">
+                          <div className="text-sm font-semibold text-foreground">
+                            Search vehicle
+                          </div>
+                          <div className="relative">
+                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                            <input
+                              type="text"
+                              aria-label="Search cars"
+                              placeholder="Search by model or category"
+                              value={modelSearch}
+                              onChange={(e) => setModelSearch(e.target.value)}
+                              className="w-full rounded-full border border-border bg-background py-3 pl-10 pr-4 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10"
+                            />
+                          </div>
+                        </div>
 
-                  <div className="space-y-2">
-                    <h3 className="font-bold text-lg">Pricing</h3>
-                    <div className="space-y-1 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Base Wrap:</span>
-                        <span className="font-medium">
-                          ${selectedWrap.price.toLocaleString()}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Installation:</span>
-                        <span className="font-medium">$500</span>
-                      </div>
-                      <div className="border-t border-border pt-2 mt-2">
-                        <div className="flex justify-between font-bold text-lg">
-                          <span>Total:</span>
-                          <span className="text-primary">
-                            ${(selectedWrap.price + 500).toLocaleString()}
-                          </span>
+                        <div className="mt-4 grid gap-2">
+                          {filteredModels.length > 0 ? (
+                            filteredModels.map((car) => (
+                              <button
+                                key={car.id}
+                                onClick={() => handleSelectCar(car)}
+                                className={`rounded-lg border px-3 py-2 text-left text-sm transition ${
+                                  selectedCar.id === car.id
+                                    ? "border-primary bg-primary/10"
+                                    : "border-border bg-card hover:border-primary/50"
+                                }`}
+                              >
+                                {car.name}
+                              </button>
+                            ))
+                          ) : (
+                            <div className="rounded-2xl border border-dashed border-border bg-card p-4 text-sm text-muted-foreground text-center">
+                              No matches found. Try a different model name or
+                              category.
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
-                  </div>
-                </div>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+            </Card>
 
-                {/* Action Buttons */}
-                <div className="flex flex-col sm:flex-row gap-4">
-                  <Button className="btn-hero flex-1">
-                    <Quote className="mr-2 w-5 h-5" />
-                    Get Official Quote
-                  </Button>
-                  <Button className="btn-secondary flex-1">
-                    Schedule Consultation
-                  </Button>
+            <Card className="card-glass h-full">
+              <Accordion type="single" collapsible className="h-full">
+                <AccordionItem
+                  value="wrap"
+                  className="h-full rounded-2xl border border-border overflow-hidden"
+                >
+                  <AccordionTrigger className="px-5">
+                    <div className="flex items-center gap-2 py-4 text-base font-medium">
+                      <Palette className="w-5 h-5 text-primary" />
+                      Wrap
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="px-5 pt-0">
+                    <div className="space-y-6 pb-4">
+                      <div className="flex flex-wrap gap-2">
+                        {WRAP_CATEGORIES.map((category) => (
+                          <button
+                            key={category}
+                            onClick={() => setSelectedWrapCategory(category)}
+                            className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                              selectedWrapCategory === category
+                                ? "bg-primary text-primary-foreground"
+                                : "border border-border bg-card text-muted-foreground hover:border-primary"
+                            }`}
+                          >
+                            {category}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        {WRAP_STYLES.map((style) => (
+                          <button
+                            key={style}
+                            onClick={() => setSelectedWrapStyle(style)}
+                            className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                              selectedWrapStyle === style
+                                ? "bg-primary text-primary-foreground"
+                                : "border border-border bg-card text-muted-foreground hover:border-primary"
+                            }`}
+                          >
+                            {style}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-3">
+                        {wrapOptions.map((wrap) => (
+                          <button
+                            key={wrap.name}
+                            onClick={() => handleSelectWrap(wrap)}
+                            className={`flex items-center gap-3 rounded-xl border p-4 transition ${
+                              selectedWrap.name === wrap.name
+                                ? "border-primary bg-primary/10"
+                                : "border-border bg-card hover:border-primary/50"
+                            }`}
+                          >
+                            <div
+                              className="h-12 w-12 rounded-lg border"
+                              style={{ backgroundColor: wrap.color }}
+                            />
+                            <div className="text-left">
+                              <div className="font-medium">{wrap.name}</div>
+                              <div className="text-sm text-muted-foreground">
+                                {wrap.type}
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+            </Card>
+
+            <Card className="card-glass h-full">
+              <Accordion type="single" collapsible className="h-full">
+                <AccordionItem
+                  value="tint"
+                  className="h-full rounded-2xl border border-border overflow-hidden"
+                >
+                  <AccordionTrigger className="px-5">
+                    <div className="flex items-center gap-2 py-4 text-base font-medium">
+                      <Palette className="w-5 h-5 text-primary" />
+                      Tint
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="px-5 pt-0">
+                    <div className="space-y-6 pb-4">
+                      <div className="rounded-2xl border border-border bg-muted/10 p-4 space-y-6">
+                        <div className="space-y-2">
+                          <div className="text-sm font-semibold text-foreground">
+                            Window tint
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            Select authentic automotive window tint shades. No
+                            generic wrap colors.
+                          </div>
+                        </div>
+
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {TINT_PRESETS.map((preset) => (
+                            <button
+                              key={preset.name}
+                              onClick={() => setSelectedTintColor(preset.color)}
+                              className={`flex items-center justify-between rounded-full border px-4 py-3 text-sm font-medium transition ${
+                                selectedTintColor === preset.color
+                                  ? "border-primary bg-primary/10 text-primary"
+                                  : "border-border bg-card text-muted-foreground hover:border-primary/50"
+                              }`}
+                            >
+                              <span>{preset.name}</span>
+                              <span
+                                className="inline-block h-4 w-10 rounded-full border border-border"
+                                style={{ backgroundColor: preset.color }}
+                              />
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <Button
+                            className="w-full btn-secondary"
+                            onClick={handleApplyTint}
+                          >
+                            Apply Tint
+                          </Button>
+                          <Button
+                            variant="outline"
+                            className="w-full"
+                            onClick={handleResetTint}
+                          >
+                            Clear Tint
+                          </Button>
+                        </div>
+
+                        <div className="text-xs text-muted-foreground">
+                          Tint is applied to windows and glass surfaces only.
+                          Wrap finishes stay unchanged.
+                        </div>
+                      </div>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+            </Card>
+          </div>
+
+          <div className="mt-8">
+            <Card className="card-glass">
+              <CardHeader>
+                <CardTitle>Configuration</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3 text-sm text-muted-foreground">
+                  <div className="flex justify-between">
+                    <span>Vehicle</span>
+                    <span className="font-medium text-foreground">
+                      {selectedCar.name}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Category</span>
+                    <span className="font-medium text-foreground">
+                      {selectedCar.category}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Wrap</span>
+                    <span className="font-medium text-foreground">
+                      {selectedWrap.name}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Finish</span>
+                    <span className="font-medium text-foreground">
+                      {selectedWrap.type}
+                    </span>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -416,8 +608,8 @@ const Visualizer = () => {
           <DialogHeader>
             <DialogTitle>360° View — {selectedCar.name}</DialogTitle>
             <DialogDescription>
-              {selectedWrap.name} · drag the image left/right to spin. Saved as a single
-              JPG ({sprite ? `${sprite.frames} frames` : ""}).
+              {selectedWrap.name} · drag the image left/right to spin. Saved as
+              a single JPG ({sprite ? `${sprite.frames} frames` : ""}).
             </DialogDescription>
           </DialogHeader>
 

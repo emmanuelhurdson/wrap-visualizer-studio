@@ -6,6 +6,7 @@ import { Link } from "react-router-dom";
 const services = [
   {
     icon: Palette,
+    slug: "vinyl-wraps",
     title: "Vinyl Wraps",
     description: "Transform your vehicle with premium vinyl wraps in endless colors and finishes",
     features: ["Matte, Gloss, Satin finishes", "Color change wraps", "Custom designs"],
@@ -13,6 +14,7 @@ const services = [
   },
   {
     icon: Shield,
+    slug: "ppf-ceramic-coating",
     title: "PPF & Ceramic Coating",
     description: "Ultimate protection combining Paint Protection Film and Ceramic Coating",
     features: ["Self-healing PPF", "Ceramic top coat", "10-year warranty"],
@@ -20,6 +22,7 @@ const services = [
   },
   {
     icon: Droplets,
+    slug: "detailing-services",
     title: "Detailing",
     description: "Complete interior and exterior detailing for the perfect finish",
     features: ["Paint correction", "Interior protection", "Maintenance packages"],
@@ -76,8 +79,8 @@ const ServicesOverview = () => {
                 </ul>
                 <div className="flex items-center justify-between pt-4">
                   <span className="text-lg font-bold text-primary">{service.price}</span>
-                  <Button variant="outline" size="sm" className="btn-secondary">
-                    Learn More
+                  <Button asChild variant="outline" size="sm" className="btn-secondary">
+                    <Link to={`/services/${service.slug}`}>Learn More</Link>
                   </Button>
                 </div>
               </CardContent>
