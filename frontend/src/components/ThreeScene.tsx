@@ -63,6 +63,7 @@ export type ThreeSceneHandle = {
   clearPaintSet: () => void;
   setEnvironment: (env: EnvironmentMode) => void;
   applyWindowTint: (color: string | null) => void;
+  captureSprite360: (opts?: Sprite360Options) => Sprite360Result | null;
 };
 
 // ── Internal types ────────────────────────────────────────────────────────────
@@ -358,6 +359,32 @@ function matchesBodyOverride(mesh: THREE.Mesh, path: string): boolean {
   return !hasHardInterior && !hasHardAccessory;
 }
 
+// A material group during auto-detection: the meshes sharing one material name,
+// their combined bounding volume, and whether any uses a diffuse (albedo) map.
+type MatGroup = { meshes: THREE.Mesh[]; volume: number; hasAlbedoTex: boolean };
+
+// Returns the first BODY_EXCLUDE keyword found in the mesh's OWN name or its own
+// material name(s), or undefined — a "direct" hit, ignoring ancestor names.
+function meshDirectHit(mesh: THREE.Mesh): string | undefined {
+  const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+  const text = [mesh.name, ...mats.map((m) => m?.name ?? "")]
+    .join(" ")
+    .toLowerCase();
+  return BODY_EXCLUDE.find((kw) => text.includes(kw));
+}
+
+// True if any ANCESTOR node's name contains an excluded keyword — catches a clean
+// mesh nested under an "interior"/"wheels"/… group.
+function isExcludedByHierarchy(mesh: THREE.Mesh): boolean {
+  let parent = mesh.parent;
+  while (parent) {
+    const name = parent.name.toLowerCase();
+    if (BODY_EXCLUDE.some((kw) => name.includes(kw))) return true;
+    parent = parent.parent;
+  }
+  return false;
+}
+
 function disposeModel(root: THREE.Group): void {
   root.traverse((obj) => {
     if (!(obj instanceof THREE.Mesh)) return;
@@ -542,6 +569,7 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(
         clearPaintSet: () => pickModeActionsRef.current?.clearPaintSet(),
         setEnvironment: (env) => envActionsRef.current?.setEnvironment(env),
         applyWindowTint: (color) => applyWindowTintRef.current?.(color),
+        captureSprite360: (opts) => captureRef.current?.(opts) ?? null,
       }),
       [],
     );
@@ -1040,10 +1068,12 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(
           volume: number;
         }[] = [];
         const overrideMeshes: THREE.Mesh[] = [];
-        const groups = new Map<
-          string,
-          { meshes: THREE.Mesh[]; volume: number }
-        >();
+        const groups = new Map<string, MatGroup>();
+
+        // Geometric centre of the whole car, used by the outward-normal check.
+        const carCenter = new THREE.Box3()
+          .setFromObject(model)
+          .getCenter(new THREE.Vector3());
 
         model.traverse((child) => {
           if (!(child instanceof THREE.Mesh)) return;
@@ -1182,7 +1212,7 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(
         //   • No mesh has an ancestor node with an excluded name
         //   • No mesh uses a diffuse (albedo) texture — car paint is plain colour;
         //     interior fabric/leather always has a texture map
-        const isBodyCandidate = ([name, g]: [string, Group]) =>
+        const isBodyCandidate = ([name, g]: [string, MatGroup]) =>
           !BODY_EXCLUDE.some((kw) => name.toLowerCase().includes(kw)) &&
           !g.meshes.some((m) => meshDirectHit(m) !== undefined) &&
           !g.meshes.some(isExcludedByHierarchy) &&

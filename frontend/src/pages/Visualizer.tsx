@@ -19,11 +19,21 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Car, Palette, Download, Share, Search } from "lucide-react";
+import { Car, Palette, Download, Share, Search, RotateCw } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import ThreeScene, {
   type ThreeSceneHandle,
   type WrapConfig,
+  type Sprite360Result,
 } from "@/components/ThreeScene";
+import Sprite360Viewer from "@/components/Sprite360Viewer";
 import { CAR_MODELS, CAR_MODELS_BY_CATEGORY, type CarModel } from "@/data/cars";
 
 // ── Category icons ────────────────────────────────────────────────────────────
@@ -162,19 +172,25 @@ const Visualizer = () => {
 
   // Read any shared config (?car=…&wrap=…) once, before first render.
   const initialParams = new URLSearchParams(window.location.search);
+  const initialCar =
+    CAR_MODELS.find((c) => c.id === initialParams.get("car")) ?? CAR_MODELS[0];
+  const initialWrap = findWrapBySlug(initialParams.get("wrap")) ?? WRAP_FINISHES[0];
 
   // Starts true: ThreeScene auto-loads 911 on mount, wipePaintSet fires first
   const [loading, setLoading] = useState(true);
-  const [selectedCar, setSelectedCar] = useState<CarModel>(CAR_MODELS[0]);
-  const [selectedWrap, setSelectedWrap] = useState<WrapFinish>(
-    WRAP_FINISHES[0],
-  );
+  const [selectedCar, setSelectedCar] = useState<CarModel>(initialCar);
+  const [selectedWrap, setSelectedWrap] = useState<WrapFinish>(initialWrap);
   const [selectedWrapCategory, setSelectedWrapCategory] =
     useState<WrapCategory>("Gloss");
   const [selectedWrapStyle, setSelectedWrapStyle] = useState<WrapStyle>("All");
   const [modelSearch, setModelSearch] = useState("");
   const [selectedTintColor, setSelectedTintColor] = useState("#232b34");
   const [activeTintColor, setActiveTintColor] = useState<string | null>(null);
+
+  // 360° capture + download dialog state
+  const [capturing, setCapturing] = useState(false);
+  const [sprite, setSprite] = useState<Sprite360Result | null>(null);
+  const [showSave, setShowSave] = useState(false);
 
   const selectedWrapRef = useRef(selectedWrap);
   selectedWrapRef.current = selectedWrap;
@@ -319,11 +335,16 @@ const Visualizer = () => {
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <CardTitle>Live Preview</CardTitle>
                 <div className="flex flex-col sm:flex-row gap-2">
-                  <Button variant="outline" size="sm">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleSave360}
+                    disabled={loading || capturing}
+                  >
                     <Download className="w-4 h-4 mr-2" />
-                    Save
+                    {capturing ? "Capturing…" : "Save"}
                   </Button>
-                  <Button variant="outline" size="sm">
+                  <Button variant="outline" size="sm" onClick={handleShare}>
                     <Share className="w-4 h-4 mr-2" />
                     Share
                   </Button>
