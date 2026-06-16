@@ -6,6 +6,8 @@ interface WrapDesignerProps {
   existingTexture?: CanvasTexture | null;
   width?: number;
   height?: number;
+  baseColor?: string;
+  onBrushColorChange?: (hex: string) => void;
 }
 
 export const WrapDesigner: React.FC<WrapDesignerProps> = ({
@@ -13,6 +15,8 @@ export const WrapDesigner: React.FC<WrapDesignerProps> = ({
   existingTexture,
   width = 512,
   height = 512,
+  baseColor = '#ffffff',
+  onBrushColorChange,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -20,59 +24,33 @@ export const WrapDesigner: React.FC<WrapDesignerProps> = ({
   const [brushSize, setBrushSize] = useState(10);
   const lastPosRef = useRef<{ x: number; y: number } | null>(null);
   const currentTextureRef = useRef<CanvasTexture | null>(null);
+  const initialisedRef = useRef(false);
 
-  const drawGrid = (ctx: CanvasRenderingContext2D) => {
-    ctx.save();
-    ctx.globalAlpha = 0.15;
-    ctx.strokeStyle = "#000000";
-    ctx.lineWidth = 1;
-    const cells = 16;
-    const cellW = width / cells;
-    const cellH = height / cells;
-    for (let i = 0; i <= cells; i++) {
-      ctx.beginPath();
-      ctx.moveTo(i * cellW, 0);
-      ctx.lineTo(i * cellW, height);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(0, i * cellH);
-      ctx.lineTo(width, i * cellH);
-      ctx.stroke();
-    }
-    ctx.restore();
-  };
-
-  const initCanvas = () => {
+  useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+
+    // Only initialise once per mount.
+    if (initialisedRef.current) return;
+    initialisedRef.current = true;
+
     canvas.width = width;
     canvas.height = height;
 
     if (existingTexture && existingTexture.image) {
       ctx.drawImage(existingTexture.image, 0, 0, width, height);
     } else {
-      ctx.fillStyle = "#ffffff";
+      // Fill with pure baseColor — no grid baked into the texture
+      ctx.fillStyle = baseColor;
       ctx.fillRect(0, 0, width, height);
-      drawGrid(ctx);
     }
 
-    if (currentTextureRef.current) {
-      currentTextureRef.current.dispose();
-    }
+    // Create the CanvasTexture once
+    if (currentTextureRef.current) currentTextureRef.current.dispose();
     const newTexture = new CanvasTexture(canvas);
     currentTextureRef.current = newTexture;
-    onTextureUpdate(newTexture);
-  };
-
-  useEffect(() => {
-    initCanvas();
-    return () => {
-      if (currentTextureRef.current) {
-        currentTextureRef.current.dispose();
-      }
-    };
   }, [existingTexture, width, height]);
 
   const drawLine = (x0: number, y0: number, x1: number, y1: number, ctx: CanvasRenderingContext2D) => {
@@ -154,9 +132,8 @@ export const WrapDesigner: React.FC<WrapDesignerProps> = ({
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
     if (!ctx) return;
-    ctx.fillStyle = "#ffffff";
+    ctx.fillStyle = baseColor;
     ctx.fillRect(0, 0, width, height);
-    drawGrid(ctx);
     updateTexture();
   };
 
@@ -167,7 +144,10 @@ export const WrapDesigner: React.FC<WrapDesignerProps> = ({
         <input
           type="color"
           value={brushColor}
-          onChange={(e) => setBrushColor(e.target.value)}
+          onChange={(e) => {
+            setBrushColor(e.target.value);
+            onBrushColorChange?.(e.target.value);
+          }}
           className="w-8 h-8 rounded border"
         />
         <label className="text-sm font-medium ml-2">Brush size:</label>
@@ -186,15 +166,32 @@ export const WrapDesigner: React.FC<WrapDesignerProps> = ({
           Clear
         </button>
       </div>
-      <canvas
-        ref={canvasRef}
-        onMouseDown={startDrawing}
-        onMouseMove={drawMove}
-        onMouseUp={endDrawing}
-        onMouseLeave={endDrawing}
-        className="border border-gray-300 rounded cursor-crosshair"
-        style={{ width: "100%", maxWidth: "400px", height: "auto" }}
-      />
+      <div className="relative" style={{ width: "100%", maxWidth: "400px" }}>
+        {/* CSS grid overlay — purely visual, NOT baked into texture */}
+        <svg
+          className="absolute inset-0 pointer-events-none"
+          width="100%"
+          height="100%"
+          viewBox={`0 0 ${width} ${height}`}
+          style={{ opacity: 0.15 }}
+        >
+          <defs>
+            <pattern id="grid" width={width / 16} height={height / 16} patternUnits="userSpaceOnUse">
+              <path d={`M ${width / 16} 0 L 0 0 0 ${height / 16}`} fill="none" stroke="#000" strokeWidth="1" />
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#grid)" />
+        </svg>
+        <canvas
+          ref={canvasRef}
+          onMouseDown={startDrawing}
+          onMouseMove={drawMove}
+          onMouseUp={endDrawing}
+          onMouseLeave={endDrawing}
+          className="border border-gray-300 rounded cursor-crosshair relative"
+          style={{ width: "100%", height: "auto" }}
+        />
+      </div>
       <p className="text-xs text-muted-foreground">
         Paint on this canvas. Your design will appear only on the selected car part.
       </p>

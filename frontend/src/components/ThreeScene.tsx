@@ -37,6 +37,10 @@ export type ThreeSceneHandle = {
   getSelectedPartUuid: () => string | null;
   getPartCustomTexture: (uuid: string) => THREE.CanvasTexture | null;
   setPartCustomTexture: (uuid: string, texture: THREE.CanvasTexture | null) => void;
+  ensureCustomTexture: (uuid: string) => THREE.CanvasTexture | null;
+  focusPart: (uuid: string) => void;
+  setBrushColor: (hex: string) => void;
+  setCameraLocked: (locked: boolean) => void;
 };
 
 type OriginalMatSnapshot = {
@@ -147,6 +151,8 @@ function makeContactShadowTexture(): THREE.CanvasTexture {
 }
 
 const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ onPaintSetChange }, ref) => {
+  // NOTE: this ref is only used inside the WebGL useEffect for UV painting.
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [paintSetSize, setPaintSetSize] = useState(0);
   const [selectedPartUuid, setSelectedPartUuid] = useState<string | null>(null);
@@ -209,6 +215,26 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ onPaintSetCh
     }
   };
 
+  /** Create a blank canvas texture for a part without applying it to the mesh yet */
+  const ensureCustomTexture = (uuid: string): THREE.CanvasTexture | null => {
+    const entry = paintSetRef.current.get(uuid);
+    if (!entry) return null;
+    if (entry.customTexture) return entry.customTexture;
+
+    // Create a 512x512 canvas white fill — just store, don't apply to mesh yet
+    const SIZE = 512;
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = SIZE;
+    const ctx = cv.getContext('2d')!;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, SIZE, SIZE);
+
+    const tex = new THREE.CanvasTexture(cv);
+    tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+    entry.customTexture = tex;
+    return tex;
+  };
+
   const setPartCustomTexture = (uuid: string, texture: THREE.CanvasTexture | null) => {
     const entry = paintSetRef.current.get(uuid);
     if (!entry) return;
@@ -232,9 +258,24 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ onPaintSetCh
 
   const selectPartForPainting = (uuid: string) => {
     setSelectedPartUuid(uuid);
+    // Auto-create canvas texture so painting works immediately
+    // (only runs once; ensureCustomTexture returns existing if already set)
+    if (uuid) {
+      setTimeout(() => ensureCustomTexture(uuid), 0);
+    }
   };
 
+  /** Exposed focusPart function to be called from outside (via handle) */
+  const focusPartRef = useRef<((uuid: string) => void) | null>(null);
+
   const getSelectedPartUuid = () => selectedPartUuid;
+
+  /** Ref for setBrushColor so the paint handler inside useEffect can read it */
+  const setBrushColorRef = useRef<(hex: string) => void>(() => {});
+  /** Ref for focusPart so outside can trigger it */
+  const focusPartActionRef = useRef<(uuid: string) => void>(() => {});
+  /** Ref for setCameraLocked so outside can toggle camera controls */
+  const setCameraLockedRef = useRef<(locked: boolean) => void>(() => {});
 
   useImperativeHandle(ref, () => ({
     applyWrap: (cfg) => applyWrapRef.current?.(cfg),
@@ -247,8 +288,17 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ onPaintSetCh
     getSelectedPartUuid,
     getPartCustomTexture,
     setPartCustomTexture,
-  }), [selectedPartUuid]);
+    ensureCustomTexture,
+    focusPart: (uuid) => focusPartActionRef.current(uuid),
+    setBrushColor: (hex) => setBrushColorRef.current(hex),
+    setCameraLocked: (locked) => setCameraLockedRef.current(locked),
+  }));
 
+  const selectedPartUuidRef = useRef<string | null>(null);
+  selectedPartUuidRef.current = selectedPartUuid;
+
+  // Keep lint happy: the Three.js scene lifecycle should not be recreated.
+  // We intentionally capture selectedPartUuid via a ref.
   useEffect(() => {
     const canvas = canvasRef.current!;
     let mounted = true;
@@ -338,7 +388,6 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ onPaintSetCh
       transparent: true,
       blending: THREE.MultiplyBlending,
       premultipliedAlpha: true,
-      renderOrder: 1,
     });
     const contactShadow = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), contactShadowMat);
     contactShadow.rotation.x = -Math.PI / 2;
@@ -398,7 +447,7 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ onPaintSetCh
             }
           );
           break;
-        case 'studio':
+        case 'studio': {
           renderer.toneMappingExposure = TONE_MAPPING_STUDIO;
           ambientLight.color.set(0xf0f4ff); ambientLight.intensity = 0.6;
           keyLight.color.set(0xf5f5ff); keyLight.intensity = 2.0;
@@ -416,6 +465,7 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ onPaintSetCh
           scene.environment = rt.texture;
           scene.background = new THREE.Color(0x2a2a2a);
           break;
+        }
         case 'solid':
           renderer.toneMappingExposure = TONE_MAPPING_STUDIO;
           ambientLight.color.set(0xffffff); ambientLight.intensity = 0.5;
@@ -682,6 +732,202 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ onPaintSetCh
     });
     observer.observe(canvas);
 
+    // ---- 3D UV PAINTING (mouse drag on car) ----
+    const paintState = {
+      isPainting: false,
+      // Temporary defaults; wire to WrapDesigner later if needed.
+      brushColor: new THREE.Color('#ff0000'),
+      brushRadiusPx: 12,
+    };
+
+    const getActivePaintMesh = (hit: THREE.Intersection<THREE.Object3D>, selUuid?: string | null): THREE.Mesh | null => {
+      if (!hit.object) return null;
+      const obj = hit.object;
+      if (!(obj instanceof THREE.Mesh)) return null;
+      const mesh = obj as THREE.Mesh;
+      if (!paintSetRef.current.has(mesh.uuid)) return null;
+      const uuid = selUuid ?? selectedPartUuidRef.current;
+      if (uuid && mesh.uuid !== uuid) return null;
+      return mesh;
+    };
+
+    const stampOnCanvasAtUV = (
+      entry: PaintEntry,
+      uv: THREE.Vector2,
+      color: THREE.Color,
+      radiusPx: number,
+    ) => {
+      const tex = entry.customTexture;
+      if (!tex) return;
+      const img = tex.image;
+      if (!img || !(img instanceof HTMLCanvasElement)) return;
+
+      const cvs = img as HTMLCanvasElement;
+      const ctx = cvs.getContext('2d');
+      if (!ctx) return;
+
+      // UV to canvas pixels. Note: UV origin is typically bottom-left for geometry, but THREE UVs are (0,0)=bottom-left.
+      // Canvas 2D origin is top-left, so we flip V.
+      const u = Math.min(1, Math.max(0, uv.x));
+      const v = Math.min(1, Math.max(0, uv.y));
+      const x = u * cvs.width;
+      const y = (1 - v) * cvs.height;
+
+      ctx.save();
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = `#${color.getHexString()}`;
+      ctx.beginPath();
+      ctx.arc(x, y, radiusPx, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      tex.needsUpdate = true;
+    };
+
+    const onPaintPointer = (clientX: number, clientY: number) => {
+      if (!paintState.isPainting) return;
+      if (!currentModelRef.current) return;
+      const selUuid = selectedPartUuidRef.current;
+      if (!selUuid) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const ndc = new THREE.Vector2(
+        ((clientX - rect.left) / rect.width) * 2 - 1,
+        ((clientY - rect.top) / rect.height) * -2 + 1,
+      );
+
+      raycaster.setFromCamera(ndc, camera);
+
+      const meshes: THREE.Mesh[] = [];
+      currentModelRef.current.traverse((c) => {
+        if (c instanceof THREE.Mesh) meshes.push(c);
+      });
+
+      const hits = raycaster.intersectObjects(meshes, false);
+      if (!hits.length) return;
+      const hit = hits[0] as THREE.Intersection<THREE.Object3D>;
+
+      const mesh = getActivePaintMesh(hit, selUuid);
+      if (!mesh) return;
+
+      const uv = hit.uv;
+      if (!uv) return;
+
+      const entry = paintSetRef.current.get(mesh.uuid);
+      if (!entry) return;
+
+      stampOnCanvasAtUV(entry, uv, paintState.brushColor, paintState.brushRadiusPx);
+    };
+
+    /** Flash a part's emissive white twice */
+    const flashPart = (entry: PaintEntry) => {
+      const mat = entry.mesh.material as THREE.MeshStandardMaterial;
+      const origEmissive = mat.emissive.clone();
+      const origIntensity = mat.emissiveIntensity;
+      let flashCount = 0;
+      const interval = setInterval(() => {
+        if (flashCount >= 4) {
+          clearInterval(interval);
+          mat.emissive.copy(origEmissive);
+          mat.emissiveIntensity = origIntensity;
+          mat.needsUpdate = true;
+          return;
+        }
+        const isOn = flashCount % 2 === 0;
+        mat.emissive.setHex(isOn ? 0xffffff : origEmissive.getHex());
+        mat.emissiveIntensity = isOn ? 2 : origIntensity;
+        mat.needsUpdate = true;
+        flashCount++;
+      }, 120);
+    };
+
+    /** Focus camera on the selected part — orbit, lock, and flash */
+    const focusOnPart = (uuid: string) => {
+      if (!currentModelRef.current) return;
+      const entry = paintSetRef.current.get(uuid);
+      if (!entry) return;
+
+      const box = new THREE.Box3().setFromObject(entry.mesh);
+      const center = box.getCenter(new THREE.Vector3());
+      const size = box.getSize(new THREE.Vector3());
+      const maxDim = Math.max(size.x, size.y, size.z);
+      const fov = camera.fov * (Math.PI / 180);
+      const dist = (maxDim / 2 / Math.tan(fov / 2)) * 1.5;
+
+      // Get the car model's root to compute world direction from model center to part center
+      const modelCenter = new THREE.Box3().setFromObject(currentModelRef.current).getCenter(new THREE.Vector3());
+      // Direction from model center to part center (this gives us which "side" of the car the part is on)
+      const orbitDir = new THREE.Vector3().subVectors(center, modelCenter);
+      orbitDir.y = Math.max(0, orbitDir.y * 0.3); // keep some height
+      if (orbitDir.length() < 0.01) {
+        orbitDir.set(0, 0.3, 1);
+      }
+      orbitDir.normalize();
+
+      // Position camera from the part, looking back along orbitDir (from the outside-in)
+      controls.target.copy(center);
+      camera.position.copy(center).add(orbitDir.multiplyScalar(dist));
+      controls.update();
+
+      // Flash the part twice (controls lock handled by caller via setCameraLocked)
+      flashPart(entry);
+    };
+
+    // Wire up the focusPartActionRef so external call works
+    focusPartActionRef.current = focusOnPart;
+
+    // Wire up setBrushColorRef to update paintState's brush color
+    setBrushColorRef.current = (hex: string) => {
+      paintState.brushColor.set(hex);
+    };
+
+    // Track manual lock state so stopPaint doesn't break it
+    let isManuallyLocked = false;
+    setCameraLockedRef.current = (locked: boolean) => {
+      isManuallyLocked = locked;
+      controls.enabled = !locked;
+    };
+
+    const onPaintDown = (e: MouseEvent) => {
+      // Only allow painting when camera is locked (part selected + lock active)
+      if (!isManuallyLocked) return;
+      const selUuid = selectedPartUuidRef.current;
+      if (!selUuid) return;
+      const entry = paintSetRef.current.get(selUuid);
+      if (!entry) return;
+
+      // Auto-create a blank canvas texture if none exists (so painting works immediately)
+      if (!entry.customTexture) {
+        ensureCustomTexture(selUuid);
+      }
+      if (!entry.customTexture) return;
+
+      // Apply the custom texture to the mesh now (only when user starts painting)
+      applyCustomTextureToMesh(entry);
+
+      // Disable orbit controls while painting
+      controls.enabled = false;
+
+      paintState.isPainting = true;
+      onPaintPointer(e.clientX, e.clientY);
+    };
+
+    const onPaintMove = (e: MouseEvent) => {
+      if (!paintState.isPainting) return;
+      onPaintPointer(e.clientX, e.clientY);
+    };
+
+    const stopPaint = () => {
+      paintState.isPainting = false;
+      // Re-enable controls only if not manually locked
+      controls.enabled = !isManuallyLocked;
+    };
+
+    canvas.addEventListener('mousedown', onPaintDown);
+    canvas.addEventListener('mousemove', onPaintMove);
+    canvas.addEventListener('mouseup', stopPaint);
+    canvas.addEventListener('mouseleave', stopPaint);
+
     let frameId: number;
     const animate = () => {
       frameId = requestAnimationFrame(animate);
@@ -698,6 +944,10 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ onPaintSetCh
       cancelAnimationFrame(frameId);
       observer.disconnect();
       canvas.removeEventListener('click', onClick);
+      canvas.removeEventListener('mousedown', onPaintDown);
+      canvas.removeEventListener('mousemove', onPaintMove);
+      canvas.removeEventListener('mouseup', stopPaint);
+      canvas.removeEventListener('mouseleave', stopPaint);
       controls.dispose();
       wipePaintSet();
       disposeEnvMap();
@@ -706,6 +956,7 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ onPaintSetCh
       if (currentModelRef.current) disposeModel(currentModelRef.current);
     };
   }, []);
+
 
   return <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%' }} />;
 });

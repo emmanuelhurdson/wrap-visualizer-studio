@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Car, Palette, Download, Share, Quote } from "lucide-react";
+import { Car, Palette, Download, Share, Quote, Lock, Unlock } from "lucide-react";
 import ThreeScene, {
   type ThreeSceneHandle,
   type WrapConfig,
@@ -132,6 +132,7 @@ export default function Visualizer() {
   const [selectedPartUuid, setSelectedPartUuid] = useState<string | null>(null);
   const [currentPartTexture, setCurrentPartTexture] =
     useState<CanvasTexture | null>(null);
+  const [isCameraLocked, setIsCameraLocked] = useState(false);
 
   const selectedWrapRef = useRef(selectedWrap);
   selectedWrapRef.current = selectedWrap;
@@ -337,20 +338,33 @@ export default function Visualizer() {
                   selectedPartUuid={selectedPartUuid}
                   onSelectPart={(uuid) => {
                     sceneRef.current?.selectPartForPainting(uuid);
+                    // Focus camera on the selected part and lock controls
+                    sceneRef.current?.focusPart(uuid);
+                    setSelectedPartUuid(uuid);
+                    // Actually lock the orbit controls AND the icon
+                    setIsCameraLocked(true);
+                    sceneRef.current?.setCameraLocked(true);
+                    // Let WrapDesigner create the canvas texture when the user starts painting.
+                    // Just get any existing texture if there is one (e.g. returning from another part).
                     const tex = sceneRef.current?.getPartCustomTexture(uuid);
                     setCurrentPartTexture(tex || null);
-                    setSelectedPartUuid(uuid);
                   }}
                   onRemovePart={(uuid) => {
-                    // For simplicity, we clear the whole paint set.
-                    // You can implement a more granular remove if desired.
-                    sceneRef.current?.clearPaintSet();
+                    // Clear custom texture for this part and revert to preset
+                    sceneRef.current?.setPartCustomTexture(uuid, null);
+                    setCurrentPartTexture(null);
+                    setSelectedPartUuid(null);
                     refreshParts();
                   }}
                 />
                 {selectedPartUuid ? (
                   <WrapDesigner
                     existingTexture={currentPartTexture}
+                    baseColor={selectedWrap.color}
+                    onBrushColorChange={(hex) => {
+                      // Sync 3D paint brush color with WrapDesigner color picker
+                      sceneRef.current?.setBrushColor(hex);
+                    }}
                     onTextureUpdate={(texture) => {
                       if (selectedPartUuid) {
                         sceneRef.current?.setPartCustomTexture(
@@ -405,6 +419,24 @@ export default function Visualizer() {
                       <p className="text-white/70 text-sm">Loading model…</p>
                     </div>
                   )}
+                  {/* Lock / Unlock toggle button */}
+                  <button
+                    onClick={() => {
+                      const next = !isCameraLocked;
+                      setIsCameraLocked(next);
+                      sceneRef.current?.setCameraLocked(next);
+                      // Unlocking also unselects the current part
+                      if (!next) {
+                        setSelectedPartUuid(null);
+                        setCurrentPartTexture(null);
+                        setIsCameraLocked(false);
+                      }
+                    }}
+                    className="absolute top-3 right-3 z-10 p-2 rounded-lg bg-black/50 text-white hover:bg-black/70 transition-colors"
+                    title={isCameraLocked ? "Unlock camera rotation" : "Lock camera rotation"}
+                  >
+                    {isCameraLocked ? <Lock className="w-5 h-5" /> : <Unlock className="w-5 h-5" />}
+                  </button>
                 </div>
 
                 {/* Configuration Summary */}
