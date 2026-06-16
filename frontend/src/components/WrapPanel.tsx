@@ -104,10 +104,11 @@ const STYLES = `
 const CAT_ICON: Record<string, string> = {
   'Coupe':    '🏎',
   'Hatchback':'🚗',
-  'Mini SUV': '🚙',
   'Pickup':   '🛻',
   'Sedan':    '🚘',
   'SUV':      '🚐',
+  'Truck':    '🚚',
+  'Wagon':    '🚗',
 };
 
 interface Preset { label: string; config: WrapConfig; swatchStyle: React.CSSProperties }
