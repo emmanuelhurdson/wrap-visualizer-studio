@@ -1,0 +1,126 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Premium Automotive Design System - All colors MUST be HSL */
+
+@layer base {
+  :root {
+    /* Premium automotive dark theme */
+    --background: 222 15% 8%;
+    --foreground: 0 0% 95%;
+
+    --card: 222 15% 10%;
+    --card-foreground: 0 0% 95%;
+
+    --popover: 222 15% 10%;
+    --popover-foreground: 0 0% 95%;
+
+    /* Premium orange accent - automotive inspired */
+    --primary: 22 100% 55%;
+    --primary-foreground: 0 0% 8%;
+    --primary-glow: 22 100% 65%;
+
+    --secondary: 222 15% 15%;
+    --secondary-foreground: 0 0% 95%;
+
+    --muted: 222 15% 12%;
+    --muted-foreground: 220 10% 60%;
+
+    --accent: 45 100% 60%;
+    --accent-foreground: 0 0% 8%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 95%;
+
+    --border: 222 15% 20%;
+    --input: 222 15% 15%;
+    --ring: 22 100% 55%;
+
+    --radius: 0.75rem;
+
+    /* Premium gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-glow)));
+    --gradient-secondary: linear-gradient(135deg, hsl(var(--secondary)), hsl(222 15% 20%));
+    --gradient-accent: linear-gradient(135deg, hsl(var(--accent)), hsl(45 100% 70%));
+    --gradient-dark: linear-gradient(135deg, hsl(222 20% 6%), hsl(222 15% 12%));
+
+    /* Automotive shadows */
+    --shadow-premium: 0 25px 50px -12px hsl(var(--primary) / 0.25);
+    --shadow-glow: 0 0 40px hsl(var(--primary-glow) / 0.3);
+    --shadow-card: 0 10px 30px -5px hsl(222 20% 5% / 0.3);
+
+    /* Animation variables */
+    --transition-smooth: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-bounce: all 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+
+    --sidebar-background: 222 15% 8%;
+    --sidebar-foreground: 0 0% 95%;
+    --sidebar-primary: 22 100% 55%;
+    --sidebar-primary-foreground: 0 0% 8%;
+    --sidebar-accent: 222 15% 15%;
+    --sidebar-accent-foreground: 0 0% 95%;
+    --sidebar-border: 222 15% 20%;
+    --sidebar-ring: 22 100% 55%;
+  }
+
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+}
+
+@layer components {
+  /* Premium button variants */
+  .btn-hero {
+    @apply bg-gradient-to-r from-primary to-primary-glow text-primary-foreground px-8 py-4 rounded-lg font-semibold text-lg;
+    box-shadow: var(--shadow-premium);
+    transition: var(--transition-smooth);
+  }
+  
+  .btn-hero:hover {
+    @apply scale-105;
+    box-shadow: var(--shadow-glow);
+  }
+  
+  .btn-secondary {
+    @apply bg-secondary/50 backdrop-blur-sm border border-border text-foreground px-6 py-3 rounded-lg font-medium;
+    transition: var(--transition-smooth);
+  }
+  
+  .btn-secondary:hover {
+    @apply bg-secondary border-primary/50;
+  }
+
+  /* Premium glass morphism cards */
+  .card-glass {
+    @apply bg-card/80 backdrop-blur-xl border border-border/50 rounded-2xl p-6;
+    box-shadow: var(--shadow-card);
+  }
+  
+  /* Automotive hero section */
+  .hero-gradient {
+    background: var(--gradient-dark);
+  }
+  
+  /* Text gradients */
+  .text-gradient-primary {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  
+  .text-gradient-accent {
+    background: var(--gradient-accent);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+}
