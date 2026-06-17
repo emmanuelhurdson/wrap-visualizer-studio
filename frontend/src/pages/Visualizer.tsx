@@ -15,6 +15,9 @@ import {
   Brush,
   Lock,
   Unlock,
+  Eraser,
+  Undo2,
+  Trash2,
 } from "lucide-react";
 import {
   Dialog,
@@ -30,9 +33,6 @@ import ThreeScene, {
   type Sprite360Result,
 } from "@/components/ThreeScene";
 import Sprite360Viewer from "@/components/Sprite360Viewer";
-import { WrapDesigner } from "@/components/WrapDesigner";
-import { PartSelector } from "@/components/PartSelector";
-import type { CanvasTexture } from "three";
 import { CAR_MODELS, type CarModel } from "@/data/cars";
 
 // ── Wrap finishes with Three.js WrapConfig mapping ────────────────────────────
@@ -200,18 +200,17 @@ const Visualizer = () => {
     Array<{ uuid: string; name: string }>
   >([]);
   const [selectedPartUuid, setSelectedPartUuid] = useState<string | null>(null);
-  const [currentPartTexture, setCurrentPartTexture] =
-    useState<CanvasTexture | null>(null);
   const [isCameraLocked, setIsCameraLocked] = useState(false);
+  const [brushColor, setBrushColor] = useState("#ff3b3b");
+  const [brushSize, setBrushSize] = useState(14);
+  const [brushMode, setBrushMode] = useState<"paint" | "erase">("paint");
 
-  // Pull the paintable-part list + selected part's texture from the scene.
+  // Pull the paintable-part list + current selection from the scene.
   const refreshParts = (): void => {
     const scene = sceneRef.current;
     if (!scene) return;
     setPaintableParts(scene.getPaintableParts());
-    const sel = scene.getSelectedPartUuid();
-    setSelectedPartUuid(sel);
-    setCurrentPartTexture(sel ? scene.getPartCustomTexture(sel) : null);
+    setSelectedPartUuid(scene.getSelectedPartUuid());
   };
 
   // Toggle a tool open/closed and fly the camera to its focus preset.
@@ -224,7 +223,6 @@ const Visualizer = () => {
       sceneRef.current?.setCameraLocked(false);
       setIsCameraLocked(false);
       setSelectedPartUuid(null);
-      setCurrentPartTexture(null);
     }
 
     setActiveTool(next);
@@ -286,7 +284,6 @@ const Visualizer = () => {
     sceneRef.current?.setCameraLocked(false);
     setIsCameraLocked(false);
     setSelectedPartUuid(null);
-    setCurrentPartTexture(null);
     sceneRef.current?.loadCar(car.path);
   };
 
@@ -653,14 +650,15 @@ const Visualizer = () => {
                   </div>
                 )}
 
-                {/* Paint (per-part custom) */}
+                {/* Paint (per-part custom — brush directly on the car) */}
                 {activeTool === "paint" && (
                   <div className="space-y-4">
                     <p className="text-xs text-white/50">
-                      Pick a body panel, then drag on the car to paint it. Lock
-                      the camera to paint; unlock to orbit.
+                      Pick a panel, then drag on the car to paint it. Lock the
+                      camera to paint; unlock to orbit.
                     </p>
 
+                    {/* Camera lock toggle */}
                     <button
                       onClick={() => {
                         const next = !isCameraLocked;
@@ -684,44 +682,122 @@ const Visualizer = () => {
                       )}
                     </button>
 
-                    <PartSelector
-                      parts={paintableParts}
-                      selectedPartUuid={selectedPartUuid}
-                      onSelectPart={(uuid) => {
-                        sceneRef.current?.selectPartForPainting(uuid);
-                        sceneRef.current?.focusPart(uuid);
-                        setSelectedPartUuid(uuid);
-                        setIsCameraLocked(true);
-                        sceneRef.current?.setCameraLocked(true);
-                        setCurrentPartTexture(
-                          sceneRef.current?.getPartCustomTexture(uuid) ?? null,
-                        );
-                      }}
-                      onRemovePart={(uuid) => {
-                        sceneRef.current?.setPartCustomTexture(uuid, null);
-                        setCurrentPartTexture(null);
-                        setSelectedPartUuid(null);
-                        refreshParts();
-                      }}
-                    />
+                    {/* Panel picker */}
+                    <div>
+                      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-white/40">
+                        Panel
+                      </div>
+                      {paintableParts.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {paintableParts.map((part) => (
+                            <button
+                              key={part.uuid}
+                              title={part.name}
+                              onClick={() => {
+                                sceneRef.current?.selectPartForPainting(
+                                  part.uuid,
+                                );
+                                sceneRef.current?.focusPart(part.uuid);
+                                setSelectedPartUuid(part.uuid);
+                                setIsCameraLocked(true);
+                                sceneRef.current?.setCameraLocked(true);
+                              }}
+                              className={`max-w-[9rem] truncate rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                                selectedPartUuid === part.uuid
+                                  ? "border-primary bg-primary/15 text-white"
+                                  : "border-white/10 bg-white/5 text-white/70 hover:border-primary/50"
+                              }`}
+                            >
+                              {part.name}
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="rounded-xl border border-dashed border-white/15 bg-white/5 p-4 text-center text-sm text-white/50">
+                          No paintable panels detected for this model.
+                        </div>
+                      )}
+                    </div>
 
+                    {/* Brush controls */}
                     {selectedPartUuid ? (
-                      <WrapDesigner
-                        existingTexture={currentPartTexture}
-                        baseColor={selectedWrap.color}
-                        onBrushColorChange={(hex) =>
-                          sceneRef.current?.setBrushColor(hex)
-                        }
-                        onTextureUpdate={(texture) => {
-                          if (selectedPartUuid) {
-                            sceneRef.current?.setPartCustomTexture(
-                              selectedPartUuid,
-                              texture,
-                            );
-                            setCurrentPartTexture(texture);
-                          }
-                        }}
-                      />
+                      <div className="space-y-4 rounded-xl border border-white/10 bg-white/5 p-3">
+                        <div className="grid grid-cols-2 gap-2">
+                          {(["paint", "erase"] as const).map((mode) => (
+                            <button
+                              key={mode}
+                              onClick={() => {
+                                setBrushMode(mode);
+                                sceneRef.current?.setBrushMode(mode);
+                              }}
+                              className={`flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium capitalize transition ${
+                                brushMode === mode
+                                  ? "border-primary bg-primary/15 text-white"
+                                  : "border-white/10 bg-white/5 text-white/70 hover:border-primary/50"
+                              }`}
+                            >
+                              {mode === "paint" ? (
+                                <Brush className="h-4 w-4" />
+                              ) : (
+                                <Eraser className="h-4 w-4" />
+                              )}
+                              {mode}
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-sm text-white/70">Colour</span>
+                          <input
+                            type="color"
+                            value={brushColor}
+                            aria-label="Brush colour"
+                            onChange={(e) => {
+                              setBrushColor(e.target.value);
+                              sceneRef.current?.setBrushColor(e.target.value);
+                            }}
+                            className="h-8 w-12 cursor-pointer rounded border border-white/15 bg-transparent"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between text-sm text-white/70">
+                            <span>Brush size</span>
+                            <span className="text-white/50">{brushSize}px</span>
+                          </div>
+                          <input
+                            type="range"
+                            min={2}
+                            max={48}
+                            value={brushSize}
+                            aria-label="Brush size"
+                            onChange={(e) => {
+                              const px = Number(e.target.value);
+                              setBrushSize(px);
+                              sceneRef.current?.setBrushSize(px);
+                            }}
+                            className="w-full accent-primary"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            onClick={() => sceneRef.current?.undoStroke()}
+                            className="flex items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-white/80 transition hover:border-primary/50 hover:text-white"
+                          >
+                            <Undo2 className="h-4 w-4" /> Undo
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (selectedPartUuid)
+                                sceneRef.current?.clearPart(selectedPartUuid);
+                            }}
+                            className="flex items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-white/80 transition hover:border-red-400/60 hover:text-white"
+                          >
+                            <Trash2 className="h-4 w-4" /> Clear
+                          </button>
+                        </div>
+                      </div>
                     ) : (
                       <div className="rounded-xl border border-dashed border-white/15 bg-white/5 p-4 text-center text-sm text-white/50">
                         Select a panel above to start painting.

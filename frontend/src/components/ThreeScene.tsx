@@ -76,20 +76,20 @@ export type ThreeSceneHandle = {
   applyWindowTint: (color: string | null) => void;
   captureSprite360: (opts?: Sprite360Options) => Sprite360Result | null;
   focusView: (view: FocusView) => void;
-  // Per-part custom painting (paint individual body panels with a brush)
+  // Per-part custom painting — paint body panels directly on the 3D model.
   getPaintableParts: () => Array<{ uuid: string; name: string }>;
   selectPartForPainting: (uuid: string) => void;
   getSelectedPartUuid: () => string | null;
-  getPartCustomTexture: (uuid: string) => THREE.CanvasTexture | null;
-  setPartCustomTexture: (
-    uuid: string,
-    texture: THREE.CanvasTexture | null,
-  ) => void;
-  ensureCustomTexture: (uuid: string) => THREE.CanvasTexture | null;
   focusPart: (uuid: string) => void;
-  setBrushColor: (hex: string) => void;
   setCameraLocked: (locked: boolean) => void;
+  setBrushColor: (hex: string) => void;
+  setBrushSize: (px: number) => void;
+  setBrushMode: (mode: BrushMode) => void;
+  undoStroke: () => void;
+  clearPart: (uuid: string) => void;
 };
+
+export type BrushMode = "paint" | "erase";
 
 // ── Internal types ────────────────────────────────────────────────────────────
 
@@ -597,10 +597,28 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(
     const selectedPartUuidRef = useRef<string | null>(null);
     selectedPartUuidRef.current = selectedPartUuid;
 
-    // Wired from inside the WebGL effect (they need camera/controls scope).
-    const setBrushColorRef = useRef<(hex: string) => void>(() => {});
-    const focusPartActionRef = useRef<(uuid: string) => void>(() => {});
-    const setCameraLockedRef = useRef<(locked: boolean) => void>(() => {});
+    // Per-part painting actions live inside the WebGL effect (they need the
+    // camera/controls/brush scope); the handle reaches them through this ref.
+    const paintActionsRef = useRef<{
+      focusPart: (uuid: string) => void;
+      setCameraLocked: (locked: boolean) => void;
+      setBrushColor: (hex: string) => void;
+      setBrushSize: (px: number) => void;
+      setBrushMode: (mode: BrushMode) => void;
+      undo: () => void;
+    } | null>(null);
+
+    // Undo history per part: canvas snapshots taken before each stroke.
+    const undoStacksRef = useRef<Map<string, ImageData[]>>(new Map());
+
+    // The colour a part shows beneath its paint — its current wrap colour, else
+    // its original material colour. Seeds the paint canvas and the eraser.
+    const getPartBaseFill = (entry: PaintEntry): string => {
+      const cfg = lastConfigRef.current;
+      if (cfg && (cfg.type === "solid" || cfg.type === "metallic"))
+        return cfg.color;
+      return `#${entry.originalSnapshot.color.getHexString()}`;
+    };
 
     // Reapply a part's material: its painted texture if any, else the active
     // wrap config, else the original captured material.
@@ -651,7 +669,8 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(
       mat.needsUpdate = true;
     };
 
-    // Create (but don't yet apply) a blank white canvas texture for a part.
+    // Create (but don't yet apply) a paint canvas seeded with the part's base
+    // colour, so strokes read against the current wrap.
     const ensureCustomTexture = (uuid: string): THREE.CanvasTexture | null => {
       const entry = paintSetRef.current.get(uuid);
       if (!entry) return null;
@@ -660,7 +679,7 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(
       const cv = document.createElement("canvas");
       cv.width = cv.height = SIZE;
       const ctx = cv.getContext("2d")!;
-      ctx.fillStyle = "#ffffff";
+      ctx.fillStyle = getPartBaseFill(entry);
       ctx.fillRect(0, 0, SIZE, SIZE);
       const tex = new THREE.CanvasTexture(cv);
       tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
@@ -668,21 +687,15 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(
       return tex;
     };
 
-    const setPartCustomTexture = (
-      uuid: string,
-      texture: THREE.CanvasTexture | null,
-    ) => {
+    // Drop a part's paint entirely and revert it to the wrap / original look.
+    const clearPartTexture = (uuid: string) => {
       const entry = paintSetRef.current.get(uuid);
       if (!entry) return;
-      if (entry.customTexture && entry.customTexture !== texture) {
-        entry.customTexture.dispose();
-      }
-      entry.customTexture = texture;
+      entry.customTexture?.dispose();
+      entry.customTexture = null;
+      undoStacksRef.current.delete(uuid);
       applyCustomTextureToMesh(entry);
     };
-
-    const getPartCustomTexture = (uuid: string): THREE.CanvasTexture | null =>
-      paintSetRef.current.get(uuid)?.customTexture ?? null;
 
     const getPaintableParts = (): Array<{ uuid: string; name: string }> =>
       Array.from(paintSetRef.current.entries()).map(([uuid, entry]) => ({
@@ -713,12 +726,14 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(
         getPaintableParts,
         selectPartForPainting,
         getSelectedPartUuid,
-        getPartCustomTexture,
-        setPartCustomTexture,
-        ensureCustomTexture,
-        focusPart: (uuid) => focusPartActionRef.current(uuid),
-        setBrushColor: (hex) => setBrushColorRef.current(hex),
-        setCameraLocked: (locked) => setCameraLockedRef.current(locked),
+        focusPart: (uuid) => paintActionsRef.current?.focusPart(uuid),
+        setCameraLocked: (locked) =>
+          paintActionsRef.current?.setCameraLocked(locked),
+        setBrushColor: (hex) => paintActionsRef.current?.setBrushColor(hex),
+        setBrushSize: (px) => paintActionsRef.current?.setBrushSize(px),
+        setBrushMode: (mode) => paintActionsRef.current?.setBrushMode(mode),
+        undoStroke: () => paintActionsRef.current?.undo(),
+        clearPart: (uuid) => clearPartTexture(uuid),
       }),
       [],
     );
@@ -1170,6 +1185,7 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(
         const entry = paintSetRef.current.get(uuid);
         if (!entry) return;
         entry.customTexture?.dispose();
+        undoStacksRef.current.delete(uuid);
         const mat = entry.mesh.material as THREE.MeshStandardMaterial;
         const o = entry.originalSnapshot;
         mat.color.copy(o.color);
@@ -1188,6 +1204,7 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(
       const wipePaintSet = (): void => {
         for (const entry of paintSetRef.current.values())
           entry.customTexture?.dispose();
+        undoStacksRef.current.clear();
         paintSetRef.current.clear();
         restoreWindowTintMaterials();
         windowTintRef.current.clear();
@@ -1226,6 +1243,9 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(
         if (newCarbonTex) carbonTexRef.current = newCarbonTex;
 
         for (const [, entry] of paintSetRef.current) {
+          // Leave hand-painted panels alone — the user's paint wins over presets.
+          if (entry.customTexture && config.type !== "reset") continue;
+
           const mat = entry.mesh.material as THREE.MeshStandardMaterial;
           mat.map = null;
 
@@ -1869,33 +1889,73 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(
       // ── Per-part UV painting (drag a brush across the selected panel) ────────────
       const paintState = {
         isPainting: false,
-        brushColor: new THREE.Color("#ff0000"),
-        brushRadiusPx: 12,
+        brushColor: new THREE.Color("#ff3b3b"),
+        brushRadiusPx: 14,
+        mode: "paint" as BrushMode,
+        lastUV: null as THREE.Vector2 | null,
       };
 
-      const stampOnCanvasAtUV = (
-        entry: PaintEntry,
-        uv: THREE.Vector2,
-        color: THREE.Color,
-        radiusPx: number,
-      ) => {
-        const tex = entry.customTexture;
-        if (!tex) return;
-        const cvs = tex.image;
-        if (!(cvs instanceof HTMLCanvasElement)) return;
-        const ctx = cvs.getContext("2d");
-        if (!ctx) return;
+      const partCanvas = (entry: PaintEntry): HTMLCanvasElement | null => {
+        const img = entry.customTexture?.image;
+        return img instanceof HTMLCanvasElement ? img : null;
+      };
+
+      // Snapshot a part's canvas before a stroke so it can be undone.
+      const pushUndo = (uuid: string, entry: PaintEntry) => {
+        const cvs = partCanvas(entry);
+        const ctx = cvs?.getContext("2d");
+        if (!cvs || !ctx) return;
+        const stack = undoStacksRef.current.get(uuid) ?? [];
+        stack.push(ctx.getImageData(0, 0, cvs.width, cvs.height));
+        if (stack.length > 20) stack.shift();
+        undoStacksRef.current.set(uuid, stack);
+      };
+
+      // Stamp one brush dot at a UV coord (eraser repaints the part's base colour).
+      const stampAtUV = (entry: PaintEntry, uv: THREE.Vector2) => {
+        const cvs = partCanvas(entry);
+        const ctx = cvs?.getContext("2d");
+        if (!cvs || !ctx || !entry.customTexture) return;
         // THREE UV origin is bottom-left; canvas 2D is top-left, so flip V.
-        const u = Math.min(1, Math.max(0, uv.x));
-        const v = Math.min(1, Math.max(0, uv.y));
-        ctx.save();
-        ctx.globalCompositeOperation = "source-over";
-        ctx.fillStyle = `#${color.getHexString()}`;
+        const x = Math.min(1, Math.max(0, uv.x)) * cvs.width;
+        const y = (1 - Math.min(1, Math.max(0, uv.y))) * cvs.height;
+        ctx.fillStyle =
+          paintState.mode === "erase"
+            ? getPartBaseFill(entry)
+            : `#${paintState.brushColor.getHexString()}`;
         ctx.beginPath();
-        ctx.arc(u * cvs.width, (1 - v) * cvs.height, radiusPx, 0, Math.PI * 2);
+        ctx.arc(x, y, paintState.brushRadiusPx, 0, Math.PI * 2);
         ctx.fill();
-        ctx.restore();
-        tex.needsUpdate = true;
+        entry.customTexture.needsUpdate = true;
+      };
+
+      // Stamp a smooth line from the previous UV to this one (no gaps when dragging fast).
+      const strokeToUV = (entry: PaintEntry, uv: THREE.Vector2) => {
+        const cvs = partCanvas(entry);
+        const prev = paintState.lastUV;
+        if (cvs && prev) {
+          const dist = Math.hypot(
+            (uv.x - prev.x) * cvs.width,
+            (uv.y - prev.y) * cvs.height,
+          );
+          const steps = Math.max(
+            1,
+            Math.ceil(dist / Math.max(1, paintState.brushRadiusPx / 2)),
+          );
+          for (let i = 1; i <= steps; i++) {
+            const t = i / steps;
+            stampAtUV(
+              entry,
+              new THREE.Vector2(
+                prev.x + (uv.x - prev.x) * t,
+                prev.y + (uv.y - prev.y) * t,
+              ),
+            );
+          }
+        } else {
+          stampAtUV(entry, uv);
+        }
+        paintState.lastUV = uv.clone();
       };
 
       const onPaintPointer = (clientX: number, clientY: number) => {
@@ -1917,19 +1977,19 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(
           if (c instanceof THREE.Mesh) meshes.push(c);
         });
 
-        const hits = raycaster.intersectObjects(meshes, false);
-        if (!hits.length) return;
-        const hit = hits[0];
-        // Only paint the selected part, and only if it's in the paint set.
+        const hit = raycaster.intersectObjects(meshes, false)[0];
+        // Only paint the selected part; if the ray leaves it, break the stroke.
         if (
+          !hit ||
           !(hit.object instanceof THREE.Mesh) ||
           hit.object.uuid !== selUuid ||
           !hit.uv
-        )
+        ) {
+          paintState.lastUV = null;
           return;
+        }
         const entry = paintSetRef.current.get(selUuid);
-        if (!entry) return;
-        stampOnCanvasAtUV(entry, hit.uv, paintState.brushColor, paintState.brushRadiusPx);
+        if (entry) strokeToUV(entry, hit.uv);
       };
 
       // Flash a part's emissive white twice to confirm focus.
@@ -1983,14 +2043,34 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(
         flashPart(entry);
       };
 
-      focusPartActionRef.current = focusOnPart;
-      setBrushColorRef.current = (hex: string) => paintState.brushColor.set(hex);
-
       // Camera lock: while locked, orbit is disabled and brush painting is enabled.
       let isManuallyLocked = false;
-      setCameraLockedRef.current = (locked: boolean) => {
-        isManuallyLocked = locked;
-        controls.enabled = !locked;
+
+      // Expose the brush/camera actions to the imperative handle.
+      paintActionsRef.current = {
+        focusPart: focusOnPart,
+        setCameraLocked: (locked) => {
+          isManuallyLocked = locked;
+          controls.enabled = !locked;
+        },
+        setBrushColor: (hex) => paintState.brushColor.set(hex),
+        setBrushSize: (px) => {
+          paintState.brushRadiusPx = Math.max(1, px);
+        },
+        setBrushMode: (mode) => {
+          paintState.mode = mode;
+        },
+        undo: () => {
+          const uuid = selectedPartUuidRef.current;
+          if (!uuid) return;
+          const entry = paintSetRef.current.get(uuid);
+          const cvs = entry ? partCanvas(entry) : null;
+          const ctx = cvs?.getContext("2d");
+          const stack = undoStacksRef.current.get(uuid);
+          if (!entry || !cvs || !ctx || !stack || !stack.length) return;
+          ctx.putImageData(stack.pop()!, 0, 0);
+          if (entry.customTexture) entry.customTexture.needsUpdate = true;
+        },
       };
 
       const onPaintDown = (e: MouseEvent) => {
@@ -2003,7 +2083,9 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(
         if (!entry.customTexture) return;
         applyCustomTextureToMesh(entry); // show the paint layer now
         controls.enabled = false;
+        pushUndo(selUuid, entry); // snapshot before the stroke
         paintState.isPainting = true;
+        paintState.lastUV = null;
         onPaintPointer(e.clientX, e.clientY);
       };
 
@@ -2013,6 +2095,7 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(
 
       const stopPaint = () => {
         paintState.isPainting = false;
+        paintState.lastUV = null;
         controls.enabled = !isManuallyLocked;
       };
 
