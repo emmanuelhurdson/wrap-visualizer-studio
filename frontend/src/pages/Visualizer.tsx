@@ -24,12 +24,12 @@ import ThreeScene, {
 import { CAR_MODELS, CAR_MODELS_BY_CATEGORY, type CarModel } from "@/data/cars";
 
 const CAT_ICON: Record<string, string> = {
-  Coupe: "🏎️",
-  Hatchback: "🚗",
-  "Mini SUV": "🚙",
-  Pickup: "🛻",
-  Sedan: "🚘",
-  SUV: "🚐",
+  Coupe: "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1b/2019_BMW_M2_Competition_%28F87%29_coupe_%282019-11-01%29_01.jpg/320px-2019_BMW_M2_Competition_%28F87%29_coupe_%282019-11-01%29_01.jpg",
+  Hatchback: "https://upload.wikimedia.org/wikipedia/commons/thumb/6/65/2019_Volkswagen_Golf_1.5_TSI_ACT_Match_%28facelift%2C_black%29%2C_front_8.21.19.jpg/320px-2019_Volkswagen_Golf_1.5_TSI_ACT_Match_%28facelift%2C_black%29%2C_front_8.21.19.jpg",
+  "Mini SUV": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/2018_Suzuki_Vitara_SZ5_AllGrip_1.6_DDiS_Front.jpg/320px-2018_Suzuki_Vitara_SZ5_AllGrip_1.6_DDiS_Front.jpg",
+  Pickup: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/2019_Ford_F-150_XLT_SuperCab_%28facelift%2C_blue%29%2C_front_8.21.19.jpg/320px-2019_Ford_F-150_XLT_SuperCab_%28facelift%2C_blue%29%2C_front_8.21.19.jpg",
+  Sedan: "https://upload.wikimedia.org/wikipedia/commons/thumb/1/15/2019_Toyota_Camry_%28AXVH71R%29_Ascent_sedan_%282019-08-27%29_01.jpg/320px-2019_Toyota_Camry_%28AXVH71R%29_Ascent_sedan_%282019-08-27%29_01.jpg",
+  SUV: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8f/2017_Toyota_Land_Cruiser_%28VDJ200R%29_GXL_wagon_%282018-08-27%29_01.jpg/320px-2017_Toyota_Land_Cruiser_%28VDJ200R%29_GXL_wagon_%282018-08-27%29_01.jpg",
 };
 
 const QUICK_PICKS: CarModel[] = Array.from(CAR_MODELS_BY_CATEGORY.values()).map(
