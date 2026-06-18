@@ -12,10 +12,23 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Car, Palette, Download, Share, Quote, Lock, Unlock } from "lucide-react";
+import {
+  Car,
+  Download,
+  Share,
+  Search,
+  RotateCw,
+  PaintBucket,
+  Droplets,
+  X,
+  Brush,
+  Lock,
+  Unlock,
+} from "lucide-react";
 import ThreeScene, {
   type ThreeSceneHandle,
   type WrapConfig,
+  type Sprite360Result,
 } from "@/components/ThreeScene";
 import { CAR_MODELS, CAR_MODELS_BY_CATEGORY, type CarModel } from "@/data/cars";
 
@@ -31,18 +44,6 @@ const CAT_ICON: Record<string, string> = {
 const QUICK_PICKS: CarModel[] = Array.from(CAR_MODELS_BY_CATEGORY.values()).map(
   (cars) => cars[0]
 );
-  Car,
-  Download,
-  Share,
-  Search,
-  RotateCw,
-  PaintBucket,
-  Droplets,
-  X,
-  Brush,
-  Lock,
-  Unlock,
-} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -51,16 +52,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import ThreeScene, {
-  type ThreeSceneHandle,
-  type WrapConfig,
-  type Sprite360Result,
-} from "@/components/ThreeScene";
 import Sprite360Viewer from "@/components/Sprite360Viewer";
 import { WrapDesigner } from "@/components/WrapDesigner";
 import { PartSelector } from "@/components/PartSelector";
 import type { CanvasTexture } from "three";
-import { CAR_MODELS, type CarModel } from "@/data/cars";
 
 // ── Wrap finishes with Three.js WrapConfig mapping ────────────────────────────
 type WrapFinish = {
